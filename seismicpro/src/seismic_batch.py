@@ -1266,6 +1266,10 @@ class SeismicBatch(Batch):
         pos = self.get_pos(None, src, index)
         pick = getattr(self, src)[pos]
         trace = getattr(self, src_raw)[pos]
+
+        if isinstance(self.index, KNNIndex):
+            trace = trace[0]
+
         trace = np.squeeze(trace)
 
         analytic = hilbert(trace)
