@@ -11,7 +11,8 @@ from ..batchflow import action, inbatch_parallel, Batch, any_action_failed
 
 from .seismic_index import SegyFilesIndex, FieldIndex
 
-from .utils import FILE_DEPENDEND_COLUMNS, partialmethod, calculate_sdc_for_field, massive_block
+from .utils import (FILE_DEPENDEND_COLUMNS, partialmethod, calculate_sdc_for_field, massive_block,
+                    check_unique_fieldrecord_across_surveys)
 from .file_utils import write_segy_file
 from .plot_utils import IndexTracker, spectrum_plot, seismic_plot, statistics_plot, gain_plot
 
@@ -273,35 +274,6 @@ class SeismicBatch(Batch):
         getattr(self, dst)[i] = dst_data
 
     @action
-    @apply_to_each_component
-    def apply_transform(self, func, *args, src, dst=None, **kwargs):
-        """Apply a function to each item in the batch.
-
-        Parameters
-        ----------
-        func : callable
-            A function to apply. Must accept an item of ``src`` as its first argument.
-        src : str, array-like
-            The source to get the data from.
-        dst : str, array-like
-            The source to put the result in.
-        args : misc
-            Any additional positional arguments to ``func``.
-        kwargs : misc
-            Any additional named arguments to ``func``.
-
-        Returns
-        -------
-        batch : SeismicBatch
-            Transformed batch.
-        """
-        super().apply_transform(func, *args, src=src, dst=dst, **kwargs)
-        dst_data = getattr(self, dst)
-        setattr(self, dst, np.array([i for i in dst_data] + [None])[:-1])
-        return self
-
-
-    @action
     @inbatch_parallel(init="_init_component", target="threads")
     @apply_to_each_component
     def band_pass_filter(self, index, *args, src, dst=None, lowcut=None, highcut=None, fs=1, order=5):
@@ -497,7 +469,7 @@ class SeismicBatch(Batch):
         batch : SeismicBatch
             Batch unchanged.
         """
-        data = getattr(self, src).astype('int')
+        data = getattr(self, src).astype(int)
         if to_samples:
             data = self.meta[traces]['samples'][data]
 
@@ -510,7 +482,7 @@ class SeismicBatch(Batch):
             df = df.sort_values(by=sort_by)
 
         df = df.loc[self.indices]
-        df['timeOffset'] = data
+        df['timeOffset'] = data.astype(int)
         df = df.reset_index(drop=self.index.name is None)[columns]
         df.columns = df.columns.droplevel(1)
 
@@ -733,7 +705,7 @@ class SeismicBatch(Batch):
 
     @action
     @inbatch_parallel(init='_init_component')
-    def field_straightening(self, index, speed, src=None, dst=None, num_mean_tr=4, sample_time=None):
+    def hodograph_straightening(self, index, speed, src=None, dst=None, num_mean_tr=4, sample_time=None):
         r""" Straightening up the travel time curve with normal grading. Shift for each
         time value calculated by following way:
 
@@ -784,7 +756,7 @@ class SeismicBatch(Batch):
             raise ValueError('Sample time should be specified or by self.meta[src] or by sample_time.')
 
         if len(speed_conc) != field.shape[1]:
-            raise ValueError('Speed must have shape equal to trace lenght, not {} but {}'.format(speed_conc.shape[0],
+            raise ValueError('Speed must have shape equal to trace length, not {} but {}'.format(speed_conc.shape[0],
                                                                                                  field.shape[1]))
         t_zero = (np.arange(1, field.shape[1]+1)*sample_time)/1000
         time_range = np.arange(0, field.shape[1])
@@ -809,12 +781,14 @@ class SeismicBatch(Batch):
         return self
 
     @action
-    def correct_spherical_divergence(self, src, dst, speed, time=None, params=None):
-        """Correction of spherical divergence with given parameers or with optimal parameters. There are two
-        ways to use this funcion. The simplest way is to determine parameters then correction will be made
-        with given parameters. Another approach is to find the parameters by ```find_sdc_params``` function
-        from SeismicDataset class for full dataset. In this way, optimal parameters will contain in dataset's
-        attribute ````sdc_params```. To use it, argument ```params``` should be None.
+    def correct_spherical_divergence(self, src, dst, speed, params, time=None):
+        """Correction of spherical divergence with given parameers or with optimal parameters.
+
+        There are two ways to use this funcion. The simplest way is to determine parameters then
+        correction will be made with given parameters. Another approach is to find the parameters
+        by ```find_sdc_params``` function from `SeismicDataset` class. In this case, optimal
+        parameters can be stored in in dataset's attribute or pipeline variable and then passed
+        to this action as `params` argument.
 
         Parameters
         ----------
@@ -824,33 +798,32 @@ class SeismicBatch(Batch):
             The batch components to put the result in.
         speed : array
             Wave propagation speed depending on the depth.
-        time : array, optimal
-           Trace time values. The default is self.meta[src]['samples'].
-        params : array, optimal
+            Speed is measured in milliseconds.
+        params : array of floats(or ints) with length 2
             Containter with parameters in the following order: [v_pow, t_pow].
+        time : array, optional
+            Trace time values. If `None` defaults to self.meta[src]['samples'].
+            Time measured in either in samples or in milliseconds.
 
         Returns
         -------
             : SeismicBatch
-            Batch of fields with corrected spherical divergence.
+            Batch of shot gathers with corrected spherical divergence.
 
         Note
         ----
-        Works properly only with FieldIndex. If you use this function with own dataset instance, you should use
-        ```params```.
+        Works properly only with FieldIndex.
 
         Raises
         ------
         ValueError : If Index is not FieldIndex.
-        ValueError : If params and sdc_params attibute are None.
+        ValueError : If length of ```params``` not equal to 2.
         """
         if not isinstance(self.index, FieldIndex):
             raise ValueError("Index must be FieldIndex, not {}".format(type(self.index)))
 
-        if params is None:
-            params = getattr(self.pipeline.dataset, 'sdc_params', None)
-            if params is None:
-                raise ValueError("params can't be None if sdc_params attribute from SeismicDataset is None.")
+        if len(params) != 2:
+            raise ValueError("The length of the ```params``` must be equal to two, not {}.".format(len(params)))
 
         time = self.meta[src]['samples'] if time is None else np.array(time, dtype=int)
         step = np.diff(time[:2])[0].astype(int)
@@ -1059,8 +1032,8 @@ class SeismicBatch(Batch):
         return self
 
     @action
-    def standartize(self, src, dst):
-        """Normalize traces to zero mean and unit variance.
+    def standardize(self, src, dst):
+        """Standardize traces to zero mean and unit variance.
 
         Parameters
         ----------
@@ -1072,7 +1045,7 @@ class SeismicBatch(Batch):
         Returns
         -------
         batch : SeismicBatch
-            Batch with the normalized traces.
+            Batch with the standardized traces.
         """
         data = np.concatenate(getattr(self, src))
         std_data = (data - np.mean(data, axis=1, keepdims=True)) / (np.std(data, axis=1, keepdims=True) + 10 ** -6)
@@ -1164,7 +1137,7 @@ class SeismicBatch(Batch):
             The batch components to put the result in.
         eps: float, default: 3
             Stabilization constant that helps reduce the rapid fluctuations of energy function.
-        l: int, default: 12
+        length_win: int, default: 12
             The leading window length.
 
         Returns
@@ -1201,4 +1174,80 @@ class SeismicBatch(Batch):
         energy = np.gradient(energy, axis=1)
         picking = np.argmax(energy, axis=1)
         self.add_components(dst, np.array([i for i in picking] + [None])[:-1])
+        return self
+
+    @action
+    @inbatch_parallel(init='_init_component')
+    def equalize(self, index, src, dst, params, survey_id_col=None):
+        """ Equalize amplitudes of different seismic surveys in dataset.
+
+        This method performs quantile normalization by shifting and
+        scaling data in each batch item so that 95% of absolute values
+        seismic surveys that item belongs to lie between 0 and 1.
+
+        `params` argument should contain a dictionary in a following form:
+
+        {survey_name: 95th_perc, ...},
+
+        where `95_perc` is an estimate for 95th percentile of absolute
+        values for seismic survey with `survey_name`.
+
+        One way to obtain such a dictionary is to use
+        `SeismicDataset.find_equalization_params' method, which calculates
+        esimated and saves them to `SeismicDataset`'s attribute. This method
+        can be used from pipeline.
+
+        Other way is to provide user-defined dictionary for `params` argument.
+
+        Parameters
+        ----------
+        src : str
+            The batch components to get the data from.
+        dst : str
+            The batch components to put the result in.
+        params : dict or NamedExpr
+            Containter with parameters for equalization.
+        survey_id_col : str, optional
+            Column in index that indicate names of seismic
+            surveys from different seasons.
+            Optional if `params` is a result of `SeismicDataset`'s
+            method `find_equalization_params`.
+
+        Returns
+        -------
+            : SeismicBatch
+            Batch of shot gathers with equalized data.
+
+        Raises
+        ------
+        ValueError : If index is not FieldIndex.
+        ValueError : If shot gather with same id is contained in more
+                     than one survey.
+
+        Note
+        ----
+        Works properly only with FieldIndex.
+        If `params` dict is user-defined, `survey_id_col` should be
+        provided excplicitly either as argument, or as `params` dict key-value
+        pair.
+        """
+        if not isinstance(self.index, FieldIndex):
+            raise ValueError("Index must be FieldIndex, not {}".format(type(self.index)))
+
+        pos = self.get_pos(None, src, index)
+        field = getattr(self, src)[pos]
+
+        if survey_id_col is None:
+            survey_id_col = params['survey_id_col']
+
+        surveys_by_fieldrecord = np.unique(self.index.get_df(index=index)[survey_id_col])
+        check_unique_fieldrecord_across_surveys(surveys_by_fieldrecord, index)
+        survey = surveys_by_fieldrecord[0]
+
+        p_95 = params[survey]
+
+        # shifting and scaling data so that 5th and 95th percentiles are -1 and 1 respectively
+        equalized_field = field / p_95
+
+        getattr(self, dst)[pos] = equalized_field
         return self
