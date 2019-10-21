@@ -173,18 +173,18 @@ class UnetAtt(EncoderDecoderWithBranch):
 
     def body(self, inputs, name='body', *args, **kwargs):
         _ = args
-        raw, offset = inputs
+        raw = inputs
 
         main_config = kwargs.pop('main')
         attn_config = kwargs.pop('attn')
 
         main = super().body(raw, name='main', **{**kwargs, **main_config}) # pylint: disable=not-a-mapping
         att = super().body(raw, name='attention', **{**kwargs, **attn_config}) # pylint: disable=not-a-mapping
-        return main, att, raw, offset
+        return main, att, raw
 
     def head(self, inputs, *args, **kwargs):
         _ = args, kwargs
-        main, att, raw, offset = inputs
+        main, att, raw = inputs
 
         #Get a single channel with sigmoid activation for the attention branch
         att = conv_block(att, layout='ca', kernel_size=3, filters=1, units=1,
@@ -201,7 +201,7 @@ class UnetAtt(EncoderDecoderWithBranch):
 
         #Shallow network that estimates sigmoid center location and shoothness
         #based on its quick estimation and offset
-        shift_in = tf.concat([tf.squeeze(att_sum, axis=1), offset], axis=1)
+        shift_in = tf.squeeze(att_sum, axis=1)
         shift_in = tf.layers.dense(shift_in, 16, activation=tf.nn.elu)
         shift_in = tf.layers.dense(shift_in, 16, activation=tf.nn.elu)
         sigmoid_center = tf.layers.dense(shift_in, 1, activation=tf.nn.relu)
