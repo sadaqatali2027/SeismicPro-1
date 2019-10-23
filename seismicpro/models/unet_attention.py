@@ -242,7 +242,7 @@ class UnetAtt(EncoderDecoderWithBranch):
 
         #Get a model output that is a superposition of raw input and main branches
         #according to attention mask
-        out_lift = raw * attention_sigmoid + main * (1 - attention_sigmoid)
+        out_lift = raw *(1 - attention_sigmoid) + main * (attention_sigmoid)
         self.store_to_attr("out_lift", out_lift)
 
         return tf.stack([out_lift, attention_sigmoid], axis=0)
@@ -269,6 +269,6 @@ def attention_loss(targets, predictions, balance, **kwargs):
     out_lift = predictions[0]
     attention_sigmoid = predictions[1]
     loss = (tf.losses.absolute_difference(targets, out_lift) +
-            balance * tf.reduce_mean(1 - attention_sigmoid))
+            balance * tf.reduce_mean(attention_sigmoid))
     tf.losses.add_loss(loss)
     return loss
