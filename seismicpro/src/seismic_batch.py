@@ -1254,8 +1254,10 @@ class SeismicBatch(Batch):
 
     @action
     @inbatch_parallel(init='_init_component', targets='threads')
-    def crop(self, index, src, dst, origin=1, shape=(256, 256)):
-        """ Crop from seismograms. Orgin argument determine how the crop is perofrmed.
+    def crop(self, index, src, dst, coords=None, n=None, shape=(256, 256)):
+        """ Crop from the seismograms. Supports 2 strategies:
+            - In case `coords` specified, perfom crop from the given coords.
+            - In case `n` specified perfom random crop n times.
 
         Parameters
         ----------
@@ -1263,16 +1265,31 @@ class SeismicBatch(Batch):
             The batch components to get the data from.
         dst : str, array-like
             The batch components to put the result in.
-        origin: list of tuples, int, str
-            Crop strategy.
+        coords: list, list of lists, default None
+            The list of top-left (x,y) coordinates for each crop.
+                - if `coords` is the list then crops from the same coords for each item in the batch.
+                - if `coords` is the list of lists then crops from individual coords for each item in the batch.
+                  In this case condition `len(coords) == len(batch)` must be satisfied.
+        n: int, default None
+            Number of random crops.
+        shape: tuple, default (256, 256)
+            Crop shape.
 
         Notes
-        ----
+        -----
         - Works properly only with FieldIndex.
-        - Origin might be list of coordinates (x, y), int or 'grid':
-          in case 'origin' is list of coordinates, each crop cut from the top-left corner with cords (x,y)
-          in case 'origin' is int, perform random crop 'origin' times
-          in case 'origin' == 'grid', cropping from image in a grid manner.
+        - One of the `coords` or `n` params must be specified.
+          If both are specified, `coords` has priority over `n`.
+
+        Examples
+        --------
+
+        ::
+
+            crop(src='raw', dst='raw_crop', n=10)
+            crop(src=['raw', 'mask], dst=['raw_crop', 'mask_crop], coords=[[0, 0], [1, 1]], shape=(100, 256))
+            crop(src=['raw', 'mask], dst=['raw_crop', 'mask_crop],
+                coords=[[[0, 0], [1, 1], [3, 3]], [[0, 0], [2, 2]]]).next_batch(2)
         """
         if not isinstance(self.index, FieldIndex):
             raise NotImplementedError("Index must be FieldIndex, not {}".format(type(self.index)))
@@ -1284,34 +1301,33 @@ class SeismicBatch(Batch):
         elif isinstance(dst, str):
             dst = (dst, )
 
-        first_iter = True
+        pos = self.get_pos(None, src[0], index)
+        field = getattr(self, src[0])[pos]
+
+        # Prepeare coords for crop
+        if isinstance(n, int) and n > 0: # random crop n times
+            x = np.random.randint(field.shape[0]-shape[0], size=n)
+            y = np.random.randint(field.shape[1]-shape[1], size=n)
+            xy = list(zip(x, y))
+
+        elif np.ndim(coords) == 2: # crop the same coords for each seismogramm
+            xy = coords
+
+        elif (np.ndim(coords) == 3) & (len(coords) == len(self)): # crop individual coords for each seismogramm
+            xy = coords[pos]
+
+        else:
+            raise ValueError('None of coords or n are properly specified')
+
         for isrc, idst in zip(src, dst):
-            pos = self.get_pos(None, isrc, index)
             field = getattr(self, isrc)[pos]
 
-            if first_iter:
+            # Perfom crop
+            res = np.empty((len(xy), ), dtype='O')
+            for i, (x, y) in enumerate(xy):
+                if (x + shape[0] > field.shape[0]) or (y + shape[1] > field.shape[1]):
+                    raise ValueError('Resulted crop shape are less than expected.')
 
-                if origin == 'grid': # grid crop
-                    raise NotImplementedError
-
-                elif isinstance(origin, int): # random crop 'origin' times
-                    x = np.random.randint(field.shape[0]-shape[0], size=origin)
-                    y = np.random.randint(field.shape[1]-shape[1], size=origin)
-                    coords = list(zip(x, y))
-
-                elif (np.ndim(origin) == 2) and (len(origin[0]) == 2): # crop the same coords for each seismogramm
-                    coords = origin
-
-                elif (np.ndim(origin) == 3) & (len(origin) == len(self)) & (len(origin[0][0]) == 2): # crop individual
-                    coords = origin[pos]
-
-                else:
-                    raise ValueError('Unknown origin format')
-
-                first_iter = False
-
-            res = np.empty((len(coords), ), dtype='O')
-            for i, (x, y) in enumerate(coords): # perform crop
                 res[i] = field[x:x+shape[0], y:y+shape[1]]
 
             getattr(self, idst)[pos] = res
