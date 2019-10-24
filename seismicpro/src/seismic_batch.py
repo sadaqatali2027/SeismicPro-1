@@ -573,7 +573,9 @@ class SeismicBatch(Batch):
         if tslice is None:
             tslice = slice(None)
 
-        with segyio.open(path, strict=False) as segyfile:
+        # Infering cube geometry may be time consuming for some `segy` files.
+        # Set `ignore_geometry = True` to skip this stage when opening `segy` file.
+        with segyio.open(path, strict=False, ignore_geometry=True) as segyfile:
             traces = np.atleast_2d([segyfile.trace[i - 1][tslice] for i in
                                     np.atleast_1d(trace_seq).astype(int)])
             samples = segyfile.samples[tslice]
@@ -1054,7 +1056,7 @@ class SeismicBatch(Batch):
         ind = np.cumsum(traces_in_item)[:-1]
 
         dst_data = np.split(std_data, ind)
-        setattr(self, dst, np.array([i for i in dst_data] + [None])[:-1])
+        setattr(self, dst, np.array(dst_data + [None])[:-1])
         return self
 
     @action
@@ -1121,7 +1123,7 @@ class SeismicBatch(Batch):
             data = np.argmax(data, axis=1)
 
         dst_data = massive_block(data)
-        setattr(self, dst, np.array([i for i in dst_data] + [None])[:-1])
+        setattr(self, dst, np.array(dst_data + [None])[:-1])
         return self
 
     @action
@@ -1150,7 +1152,7 @@ class SeismicBatch(Batch):
         long_win, lead_win = energy, energy
         lead_win[:, length_win:] = lead_win[:, length_win:] - lead_win[:, :-length_win]
         energy = lead_win / (long_win + eps)
-        self.add_components(dst, init=np.array([i for i in energy] + [None])[:-1])
+        self.add_components(dst, init=np.array(energy + [None])[:-1])
         return self
 
     @action
@@ -1173,7 +1175,7 @@ class SeismicBatch(Batch):
         energy = np.stack(getattr(self, src))
         energy = np.gradient(energy, axis=1)
         picking = np.argmax(energy, axis=1)
-        self.add_components(dst, np.array([i for i in picking] + [None])[:-1])
+        self.add_components(dst, np.array(picking + [None])[:-1])
         return self
 
     @action
