@@ -216,7 +216,7 @@ class UnetAtt(EncoderDecoderWithBranch):
 
         # Get a model output that is a superposition of raw input and main branches
         # according to attention mask
-        out_lift = raw * (1 - attention_sigmoid) + main * (attention_sigmoid)
+        out_lift = raw * (attention_sigmoid) + main * (1 - attention_sigmoid)
         self.store_to_attr("out_lift", out_lift)
 
         return tf.stack([out_lift, attention_sigmoid], axis=0)
