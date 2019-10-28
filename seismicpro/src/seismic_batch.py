@@ -1056,7 +1056,7 @@ class SeismicBatch(Batch):
         ind = np.cumsum(traces_in_item)[:-1]
 
         dst_data = np.split(std_data, ind)
-        setattr(self, dst, np.array(dst_data + [None])[:-1]) # `dst_data` array implicitly converted to object dtype
+        setattr(self, dst, np.array(dst_data + [None])[:-1]) # array implicitly converted to object dtype
         return self
 
     @action
@@ -1123,7 +1123,7 @@ class SeismicBatch(Batch):
             data = np.argmax(data, axis=1)
 
         dst_data = massive_block(data)
-        setattr(self, dst, np.array(dst_data + [None])[:-1]) # `dst_data` array implicitly converted to object dtype
+        setattr(self, dst, np.array(dst_data + [None])[:-1]) # array implicitly converted to object dtype
         return self
 
     @action
@@ -1152,7 +1152,7 @@ class SeismicBatch(Batch):
         long_win, lead_win = energy, energy
         lead_win[:, length_win:] = lead_win[:, length_win:] - lead_win[:, :-length_win]
         energy = lead_win / (long_win + eps)
-        self.add_components(dst, init=np.array(energy + [None])[:-1]) # `energy` array implicitly converted to object dtype
+        self.add_components(dst, init=np.array(energy + [None])[:-1]) # array implicitly converted to object dtype
         return self
 
     @action
@@ -1175,7 +1175,7 @@ class SeismicBatch(Batch):
         energy = np.stack(getattr(self, src))
         energy = np.gradient(energy, axis=1)
         picking = np.argmax(energy, axis=1)
-        self.add_components(dst, np.array(picking + [None])[:-1]) # `picking` array implicitly converted to object dtype
+        self.add_components(dst, np.array(picking + [None])[:-1]) # array implicitly converted to object dtype
         return self
 
     @action
