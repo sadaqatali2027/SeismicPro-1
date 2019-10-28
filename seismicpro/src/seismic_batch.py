@@ -10,7 +10,7 @@ import segyio
 
 from ..batchflow import action, inbatch_parallel, Batch, any_action_failed
 
-from .seismic_index import SegyFilesIndex, FieldIndex
+from .seismic_index import SegyFilesIndex, FieldIndex, KNNIndex
 
 from .utils import (FILE_DEPENDEND_COLUMNS, partialmethod, calculate_sdc_for_field, massive_block,
                     check_unique_fieldrecord_across_surveys)
@@ -449,7 +449,7 @@ class SeismicBatch(Batch):
         return self
 
     @action
-    def _dump_picking(self, src, path, traces, to_samples, columns=None):
+    def _dump_picking(self, src, path, traces, to_samples, columns=None, max_len=(6, 4)):
         """Dump picking to file.
 
         Parameters
@@ -483,13 +483,19 @@ class SeismicBatch(Batch):
             df = df.sort_values(by=sort_by)
 
         df = df.loc[self.indices]
+
+        if isinstance(self.index, KNNIndex):
+            df = df.iloc[::5, :]
+
         df['timeOffset'] = data.astype(int)
         df = df.reset_index(drop=self.index.name is None)[columns]
         df.columns = df.columns.droplevel(1)
 
-        for i in [0, 2, 4]:
-            df.insert(i, str(i), "")
-        df.to_csv(path, index=False, sep='\t', header=False, encoding='ascii', mode='a')
+        with open(path, 'a') as f:
+            for row in df.iterrows():
+                for i, item in enumerate(row[1][:-1]):
+                    f.write(str(item).ljust(max_len[i] + 8))
+                f.write(str(row[1][-1]) + '\n')
         return self
 
     @action
@@ -1129,6 +1135,7 @@ class SeismicBatch(Batch):
         if not labels:
             data = np.argmax(data, axis=1)
 
+<<<<<<< HEAD
         if isinstance(self.index, FieldIndex):
             data = np.concatenate(data)
 
@@ -1138,6 +1145,9 @@ class SeismicBatch(Batch):
         ind = np.cumsum(traces_in_item)[:-1]
 
         dst_data = np.split(dst_data, ind)
+=======
+        dst_data = massive_block(np.stack(data))
+>>>>>>> polytech_launch
         setattr(self, dst, np.array([i for i in dst_data] + [None])[:-1])
         return self
 
@@ -1280,6 +1290,7 @@ class SeismicBatch(Batch):
         return self
 
     @action
+<<<<<<< HEAD
     @inbatch_parallel(init='_init_component', targets='threads')
     def crop(self, index, src, dst, origin=1, shape=(256, 256)):
         """ Crop from seismograms. Orgin argument determine how the crop is perofrmed.
@@ -1368,4 +1379,29 @@ class SeismicBatch(Batch):
 
         dst_data = np.split(dst_data, ind)
         setattr(self, dst, np.array([i for i in dst_data] + [None])[:-1])
+=======
+    @inbatch_parallel(init='_init_component', target="threads")
+    def shift_pick(self, index, src, dst=None, src_raw='raw', shift=1.5*np.pi, thd=0.05):
+        """ Shifts picking time on given phase"""
+        pos = self.get_pos(None, src, index)
+        pick = getattr(self, src)[pos]
+        trace = getattr(self, src_raw)[pos]
+
+        if isinstance(self.index, KNNIndex):
+            trace = trace[0]
+
+        trace = np.squeeze(trace)
+
+        analytic = hilbert(trace)
+        phase = np.unwrap(np.angle(analytic))
+
+        phase_diff = phase[pick] - shift
+        phase_mod = np.abs(phase - phase_diff)
+        zero = phase_mod.argmin()
+
+        n_skip = (np.abs(trace[zero:]) > thd).argmax() - 1
+        zero += n_skip
+
+        getattr(self, dst)[pos] = zero
+>>>>>>> polytech_launch
         return self
