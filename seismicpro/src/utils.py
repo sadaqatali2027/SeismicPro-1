@@ -597,8 +597,14 @@ def build_segy_df(extra_headers=None, name=None, limits=None, **kwargs):
     df = pd.concat([make_segy_index(index.get_fullpath(i), extra_headers, limits) for
                     i in sorted(index.indices)])
     if markup_path is not None:
-        markup = pd.read_csv(markup_path)
-        df = df.merge(markup, how='inner')
+        if isinstance(markup_path, str):
+            markup_path = (markup_path, )
+        for i, mp in enumerate(markup_path):
+            markup = pd.read_csv(mp)
+            markup_cols = markup.columns.values
+            markup_cols[-1] += '_' + str(i + 1)
+            markup.columns = markup_cols 
+            df = df.merge(markup, how='inner')
     common_cols = list(set(df.columns) - set(FILE_DEPENDEND_COLUMNS))
     df = df[common_cols + FILE_DEPENDEND_COLUMNS]
     df.columns = pd.MultiIndex.from_arrays([common_cols + FILE_DEPENDEND_COLUMNS,

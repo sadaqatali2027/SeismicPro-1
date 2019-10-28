@@ -527,10 +527,13 @@ class SeismicBatch(Batch):
 
     def _load_picking(self, components):
         """Load picking from file."""
+        if isinstance(components, str):
+            components = (components, )
         idf = self.index.get_df(reset=False)
-        res = np.split(idf.FIRST_BREAK_TIME.values,
-                       np.cumsum(self.index.tracecounts))[:-1]
-        self.add_components(components, init=res)
+        for i, comp in enumerate(components):
+            ifb = 'FIRST_BREAK_TIME' + '_' + str(i + 1)
+            res = np.split(idf[ifb].values, np.cumsum(self.index.tracecounts))[:-1]
+            self.add_components(comp, init=res)
         return self
 
     @apply_to_each_component
@@ -1135,19 +1138,15 @@ class SeismicBatch(Batch):
         if not labels:
             data = np.argmax(data, axis=1)
 
-<<<<<<< HEAD
         if isinstance(self.index, FieldIndex):
             data = np.concatenate(data)
 
-        dst_data = massive_block(data)
+        dst_data = massive_block(np.stack(data))
 
         traces_in_item = [len(i) for i in getattr(self, src_raw)]
         ind = np.cumsum(traces_in_item)[:-1]
 
         dst_data = np.split(dst_data, ind)
-=======
-        dst_data = massive_block(np.stack(data))
->>>>>>> polytech_launch
         setattr(self, dst, np.array([i for i in dst_data] + [None])[:-1])
         return self
 
@@ -1290,7 +1289,6 @@ class SeismicBatch(Batch):
         return self
 
     @action
-<<<<<<< HEAD
     @inbatch_parallel(init='_init_component', targets='threads')
     def crop(self, index, src, dst, origin=1, shape=(256, 256)):
         """ Crop from seismograms. Orgin argument determine how the crop is perofrmed.
@@ -1379,7 +1377,9 @@ class SeismicBatch(Batch):
 
         dst_data = np.split(dst_data, ind)
         setattr(self, dst, np.array([i for i in dst_data] + [None])[:-1])
-=======
+        return self
+    
+    @action
     @inbatch_parallel(init='_init_component', target="threads")
     def shift_pick(self, index, src, dst=None, src_raw='raw', shift=1.5*np.pi, thd=0.05):
         """ Shifts picking time on given phase"""
@@ -1403,5 +1403,4 @@ class SeismicBatch(Batch):
         zero += n_skip
 
         getattr(self, dst)[pos] = zero
->>>>>>> polytech_launch
         return self
