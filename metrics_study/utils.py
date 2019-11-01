@@ -63,7 +63,7 @@ def get_windowed_spectrogram_dists(smgr, smgl, dist_fn='sum_abs',
 
 def draw_modifications_dist(modifications, traces_frac=0.1, distances='sum_abs',  # pylint: disable=too-many-arguments
                             vmin=None, vmax=None, figsize=(15, 15),
-                            time_frame_width=100, noverlap=None, window='boxcar',
+                            time_frame_width=100, noverlap=0, window='boxcar',
                             n_cols=None, fontsize=20, aspect=None,
                             save_to=None):
     """
