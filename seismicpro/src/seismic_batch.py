@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy import signal
 from scipy.signal import hilbert
+from scipy.special import expit
 import pywt
 import segyio
 
@@ -583,7 +584,7 @@ class SeismicBatch(Batch):
         if tslice is None:
             tslice = slice(None)
 
-        with segyio.open(path, strict=False) as segyfile:
+        with segyio.open(path, strict=False, ignore_geometry=True) as segyfile:
             traces = np.atleast_2d([segyfile.trace[i - 1][tslice] for i in
                                     np.atleast_1d(trace_seq).astype(int)])
             samples = segyfile.samples[tslice]
@@ -934,7 +935,7 @@ class SeismicBatch(Batch):
         if src_picking is not None:
             pts_picking = []
             for sp in src_picking:
-                picking = getattr(self, sp)[pos]
+                picking = getattr(self, sp)[pos].copy()
                 if pick_to_samples:
                     rate = self.meta[src[0]]['interval'] / 1e3
                     picking /= rate
@@ -1075,7 +1076,7 @@ class SeismicBatch(Batch):
         return self
 
     @action
-    def picking_to_mask(self, src, dst, src_traces='raw'):
+    def picking_to_mask(self, src, dst, src_traces='raw', soft=False):
         """Convert picking time to the mask for TraceIndex.
 
         Parameters
@@ -1097,14 +1098,19 @@ class SeismicBatch(Batch):
         samples = self.meta[src_traces]['samples']
         tick = samples[1] - samples[0]
         data = np.around(data / tick).astype('int')
-
         batch_size = data.shape[0]
         trace_length = getattr(self, src_traces)[0].shape[1]
-        ind = tuple(np.array(list(zip(range(batch_size), data))).T)
-        ind[1][ind[1] < 0] = 0
-        mask = np.zeros((batch_size, trace_length))
-        mask[ind] = 1
-        dst_data = np.cumsum(mask, axis=1)
+        if soft:
+            a = np.arange(0, trace_length)
+            b = np.tile(a, (batch_size, 1))
+            c = b - data.reshape(-1, 1)
+            dst_data = expit(c)
+        else:
+            ind = tuple(np.array(list(zip(range(batch_size), data))).T)
+            ind[1][ind[1] < 0] = 0
+            mask = np.zeros((batch_size, trace_length))
+            mask[ind] = 1
+            dst_data = np.cumsum(mask, axis=1)
 
         traces_in_item = [len(i) for i in getattr(self, src)]
         ind = np.cumsum(traces_in_item)[:-1]
@@ -1396,10 +1402,12 @@ class SeismicBatch(Batch):
         phase = np.unwrap(np.angle(analytic))
 
         phase_diff = phase[pick] - shift
-        phase_mod = np.abs(phase - phase_diff)
-        zero = phase_mod.argmin()
+        phase_mod = phase - phase_diff
+        phase_mod[phase_mod < 0] = 0
+        zero = len(phase_mod) - phase_mod[::-1].argmin() - 1
+        #zero = phase_mod.argmin()
 
-        n_skip = (np.abs(trace[zero:]) > thd).argmax() - 1
+        n_skip = max((np.abs(trace[zero:]) > thd).argmax() - 1, 0)
         zero += n_skip
 
         getattr(self, dst)[pos] = zero
