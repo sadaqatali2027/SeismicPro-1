@@ -124,11 +124,11 @@ def draw_modifications_dist(modifications, traces_frac=0.1, distances='sum_abs',
     for i, (mod, description) in enumerate(modifications):
         distances_strings = []
         for dist_fn in distances:
-            dist_a, dist_p = get_windowed_spectrogram_dists(mod[0:n_use_traces], origin[0:n_use_traces],
-                                                            dist_fn=dist_fn, time_frame_width=time_frame_width,
-                                                            noverlap=noverlap, window=window)
+            dist_a, _ = get_windowed_spectrogram_dists(mod[0:n_use_traces], origin[0:n_use_traces],
+                                                       dist_fn=dist_fn, time_frame_width=time_frame_width,
+                                                       noverlap=noverlap, window=window)
 
-            distances_strings.append(r"$\mu$={:.4}, $\phi$={:.4}".format(np.mean(dist_a), np.mean(dist_p)))
+            distances_strings.append(r"$\mu$={:.4}".format(np.mean(dist_a)))
 
         axs[i].imshow(mod.T, vmin=vmin, vmax=vmax, cmap='gray')
         rect = patches.Rectangle((0, 0), n_use_traces, n_ts, edgecolor='r', facecolor='none', lw=1)
@@ -172,11 +172,10 @@ def validate_all(batch, scale_lift=1, traces_frac=0.1, distance='sum_abs',
         n_use_traces = int(n_traces*traces_frac)
 
         for mod, description in modifications:
-            dist_a, dist_p = get_windowed_spectrogram_dists(mod[0:n_use_traces], origin[0:n_use_traces],
-                                                            dist_fn=distance, time_frame_width=time_frame_width,
-                                                            noverlap=noverlap, window=window)
+            dist_a, _ = get_windowed_spectrogram_dists(mod[0:n_use_traces], origin[0:n_use_traces],
+                                                       dist_fn=distance, time_frame_width=time_frame_width,
+                                                       noverlap=noverlap, window=window)
             res[i][description + '_amp'] = np.mean(dist_a)
-            res[i][description + '_ph'] = np.mean(dist_p)
 
     return res
 
