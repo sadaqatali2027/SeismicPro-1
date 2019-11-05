@@ -46,19 +46,15 @@ def get_windowed_spectrogram_dists(smgr, smgl, dist_fn='sum_abs',
     }
     a_l = np.abs(spgl) ** 2 * 2
     a_r = np.abs(spgr) ** 2 * 2
-    p_l = np.angle(spgl)
-    p_r = np.angle(spgr)
 
     if callable(dist_fn):  # res(sl, sr)
         res_a = dist_fn(a_l, a_r)
-        res_p = dist_fn(p_l, p_r)
     elif dist_fn in funcs:
         res_a = funcs[dist_fn](a_l, a_r)
-        res_p = funcs[dist_fn](p_l, p_r)
     else:
         raise NotImplementedError('modes other than max_abs, sum_abs, sum_sq not implemented yet')
 
-    return res_a, res_p
+    return res_a
 
 
 def draw_modifications_dist(modifications, traces_frac=0.1, distances='sum_abs',  # pylint: disable=too-many-arguments
@@ -124,9 +120,9 @@ def draw_modifications_dist(modifications, traces_frac=0.1, distances='sum_abs',
     for i, (mod, description) in enumerate(modifications):
         distances_strings = []
         for dist_fn in distances:
-            dist_a, _ = get_windowed_spectrogram_dists(mod[0:n_use_traces], origin[0:n_use_traces],
-                                                       dist_fn=dist_fn, time_frame_width=time_frame_width,
-                                                       noverlap=noverlap, window=window)
+            dist_a = get_windowed_spectrogram_dists(mod[0:n_use_traces], origin[0:n_use_traces],
+                                                    dist_fn=dist_fn, time_frame_width=time_frame_width,
+                                                    noverlap=noverlap, window=window)
 
             distances_strings.append(r"$\mu$={:.4}".format(np.mean(dist_a)))
 
@@ -172,9 +168,9 @@ def validate_all(batch, scale_lift=1, traces_frac=0.1, distance='sum_abs',
         n_use_traces = int(n_traces*traces_frac)
 
         for mod, description in modifications:
-            dist_a, _ = get_windowed_spectrogram_dists(mod[0:n_use_traces], origin[0:n_use_traces],
-                                                       dist_fn=distance, time_frame_width=time_frame_width,
-                                                       noverlap=noverlap, window=window)
+            dist_a = get_windowed_spectrogram_dists(mod[0:n_use_traces], origin[0:n_use_traces],
+                                                    dist_fn=distance, time_frame_width=time_frame_width,
+                                                    noverlap=noverlap, window=window)
             res[i][description + '_amp'] = np.mean(dist_a)
 
     return res
