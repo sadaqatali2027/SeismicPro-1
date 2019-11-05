@@ -1,5 +1,6 @@
 """ UnetAttention model """
 import tensorflow as tf
+import numpy as np
 
 from ..batchflow.batchflow.models.tf import EncoderDecoder
 from ..batchflow.batchflow.models.tf.layers import conv_block, combine
@@ -222,46 +223,10 @@ class UnetAtt(EncoderDecoderWithBranch):
         return tf.stack([out_lift, attention_sigmoid], axis=0)
 
 
-class UnetAttGauss1(EncoderDecoderWithBranch):
+class UnetAttGauss1(UnetAtt):
     """Class for Unet Attention model."""
 
-    @classmethod
-    def default_config(cls):
-        config = super().default_config()
-
-        body_config = config['body']
-
-        config['body'] = None
-        config['body/main'] = body_config
-        config['body/attn'] = body_config
-
-        return config
-
-    def initial_block(self, inputs, *args, **kwargs):
-        _ = args, kwargs
-        return inputs
-
-    def body(self, inputs, name='body', *args, **kwargs):
-        _ = args
-        raw = inputs
-
-        main_config = kwargs.pop('main')
-        attn_config = kwargs.pop('attn')
-
-        with tf.variable_scope('main_branch'):
-            main = super().body(raw, **{**kwargs, **main_config}) # pylint: disable=not-a-mapping
-
-            #Get a single channel with linear activation for the main branch
-            main = conv_block(main, layout='c', filters=1, units=1, name='head_main')
-
-        with tf.variable_scope('attention_branch'):
-            att = super().body(raw, **{**kwargs, **attn_config}) # pylint: disable=not-a-mapping
-
-            # Get a single channel with sigmoid activation for the attention branch
-            att = conv_block(att, layout='ca', kernel_size=3, filters=1, units=1,
-                             activation=tf.nn.sigmoid, name='head_att')
-
-        return main, att, raw
+    scale = 2 * np.sqrt(np.log(2))
 
     def head(self, inputs, *args, **kwargs):
         _ = args
@@ -276,8 +241,7 @@ class UnetAttGauss1(EncoderDecoderWithBranch):
         simple_sum = tf.reduce_sum(m, axis=1, keepdims=True)
 
         mu = weigthed_sum / simple_sum
-        scale = kwargs.get('scale', 1)
-        sigma = simple_sum / scale
+        sigma = simple_sum / self.scale
 
         attention_gaussian = tf.exp(-tf.square((arange - mu) / sigma))
         attention_gaussian = tf.sigmoid(100*(attention_gaussian - 0.5))
