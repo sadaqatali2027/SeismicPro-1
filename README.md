@@ -1,6 +1,5 @@
 [![License](https://img.shields.io/github/license/analysiscenter/batchflow.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 [![Python](https://img.shields.io/badge/python-3.5-blue.svg)](https://python.org)
-[![Run Status](https://api.shippable.com/projects/5d5e601aed1bf40007051a93/badge?branch=master)](https://app.shippable.com/github/gazprom-neft/SeismicPro)
 
 # SeismicPro
 
