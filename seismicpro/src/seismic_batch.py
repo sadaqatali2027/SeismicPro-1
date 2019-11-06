@@ -1252,12 +1252,55 @@ class SeismicBatch(Batch):
         getattr(self, dst)[pos] = equalized_field
         return self
 
+    def _post_random_crop(self, coords, **kwargs):
+        _ = kwargs.pop('n')
+        self.crop(coords=coords, **kwargs)
+        return self
+
     @action
-    @inbatch_parallel(init='_init_component', targets='threads')
-    def crop(self, index, src, dst, coords=None, n=None, shape=(256, 256)):
-        """ Crop from the seismograms. Supports 2 strategies:
-            - In case `coords` specified, perfom crop from the given coords.
-            - In case `n` specified perfom random crop n times.
+    @inbatch_parallel(init='indices', post='_post_random_crop')
+    def random_crop(self, index, src, n, shape, dst=None):
+        """ Random crop from the seismograms.
+
+        Parameters
+        ----------
+        src : str, array-like
+            The batch components to get the data from.
+        dst : str, array-like
+            The batch components to put the result in.
+        n: int
+            Number of random crops.
+        shape: tupl
+            Crop shape.
+
+        Notes
+        -----
+        - Works properly only with FieldIndex.
+
+        Examples
+        --------
+
+        ::
+
+            crop(src='raw', dst='raw_crop', n=10, shape=(10, 10))
+        """
+        if isinstance(src, str):
+            src = (src,)
+        pos = self.get_pos(None, src[0], index)
+        field = getattr(self, src[0])[pos]
+
+        # Sample coords
+        if isinstance(n, int) and n > 0:
+            x = np.random.randint(field.shape[0]-shape[0], size=n)
+            y = np.random.randint(field.shape[1]-shape[1], size=n)
+            return  list(zip(x, y))
+
+        raise ValueError('n must be positive integer, got', n)
+
+    @action
+    @inbatch_parallel(init='_init_component')
+    def crop(self, index, src, coords, shape, dst=None):
+        """ Crop from the seismograms by given coordinates.
 
         Parameters
         ----------
@@ -1270,27 +1313,23 @@ class SeismicBatch(Batch):
                 - if `coords` is the list then crops from the same coords for each item in the batch.
                 - if `coords` is the list of lists then crops from individual coords for each item in the batch.
                   In this case condition `len(coords) == len(batch)` must be satisfied.
-        n: int, default None
-            Number of random crops.
-        shape: tuple, default (256, 256)
+        shape: tuple
             Crop shape.
 
         Notes
         -----
         - Works properly only with FieldIndex.
-        - One of the `coords` or `n` params must be specified.
-          If both are specified, `coords` has priority over `n`.
 
         Examples
         --------
 
         ::
 
-            crop(src='raw', dst='raw_crop', n=10)
             crop(src=['raw', 'mask], dst=['raw_crop', 'mask_crop], coords=[[0, 0], [1, 1]], shape=(100, 256))
-            crop(src=['raw', 'mask], dst=['raw_crop', 'mask_crop],
-                coords=[[[0, 0], [1, 1], [3, 3]], [[0, 0], [2, 2]]]).next_batch(2)
+            crop(src=['raw', 'mask], dst=['raw_crop', 'mask_crop], shape=(100, 256)
+                coords=[[[0, 0]], [[0, 0], [2, 2]]]).next_batch(2)
         """
+
         if not isinstance(self.index, FieldIndex):
             raise NotImplementedError("Index must be FieldIndex, not {}".format(type(self.index)))
 
@@ -1304,20 +1343,14 @@ class SeismicBatch(Batch):
         pos = self.get_pos(None, src[0], index)
         field = getattr(self, src[0])[pos]
 
-        # Prepeare coords for crop
-        if isinstance(n, int) and n > 0: # random crop n times
-            x = np.random.randint(field.shape[0]-shape[0], size=n)
-            y = np.random.randint(field.shape[1]-shape[1], size=n)
-            xy = list(zip(x, y))
-
-        elif np.ndim(coords) == 2: # crop the same coords for each seismogramm
-            xy = coords
+        if np.ndim(coords) == 2: # crop the same coords for each seismogramm
+            xy = coords # pylint: disable=invalid-name
 
         elif (np.ndim(coords) == 3) & (len(coords) == len(self)): # crop individual coords for each seismogramm
-            xy = coords[pos]
+            xy = coords[pos] # pylint: disable=invalid-name
 
         else:
-            raise ValueError('None of coords or n are properly specified')
+            raise ValueError('Coords not specified correctly')
 
         for isrc, idst in zip(src, dst):
             field = getattr(self, isrc)[pos]
