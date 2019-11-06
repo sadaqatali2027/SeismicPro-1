@@ -1259,7 +1259,7 @@ class SeismicBatch(Batch):
 
     @action
     @inbatch_parallel(init='indices', post='_post_random_crop')
-    def random_crop(self, index, src, n, shape, dst=None):
+    def random_crop(self, index, src, num_crops, shape, dst=None):
         """ Random crop from the seismograms.
 
         Parameters
@@ -1268,7 +1268,7 @@ class SeismicBatch(Batch):
             The batch components to get the data from.
         dst : str, array-like
             The batch components to put the result in.
-        n: int
+        num_crops: int
             Number of random crops.
         shape: tupl
             Crop shape.
@@ -1290,12 +1290,12 @@ class SeismicBatch(Batch):
         field = getattr(self, src[0])[pos]
 
         # Sample coords
-        if isinstance(n, int) and n > 0:
-            x = np.random.randint(field.shape[0]-shape[0], size=n)
-            y = np.random.randint(field.shape[1]-shape[1], size=n)
+        if isinstance(num_crops, int) and num_crops > 0:
+            x = np.random.randint(field.shape[0]-shape[0], size=num_crops)
+            y = np.random.randint(field.shape[1]-shape[1], size=num_crops)
             return  list(zip(x, y))
 
-        raise ValueError('n must be positive integer, got', n)
+        raise ValueError('num_crops must be positive integer, got', num_crops)
 
     @action
     @inbatch_parallel(init='_init_component')
