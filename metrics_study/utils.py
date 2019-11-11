@@ -33,7 +33,6 @@ def get_windowed_spectrogram_dists(smgr, smgl, dist_fn='sum_abs',
     Returns
     -------
     np.array of shape (traces count, segment times) with distance heatmap
-
     """
     kwargs = dict(window=window, nperseg=time_frame_width, noverlap=noverlap, mode='complex')
     *_, spgl = signal.spectrogram(smgl, **kwargs)
@@ -72,7 +71,7 @@ def draw_modifications_dist(modifications, traces_frac=0.1, distances='sum_abs',
         traces in seismograms should be ordered by absolute offset increasing
 
     traces_frac : float, optional
-        fraction of traces to use to compure metrics
+        fraction of traces to use to compute metrics
 
     distances : list of str or callables, or str, or callable, optional
         dist_fn to pass to get_windowed_spectrogram_dists
