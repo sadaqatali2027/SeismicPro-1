@@ -12,7 +12,7 @@ from ..batchflow import action, inbatch_parallel, Batch, any_action_failed
 from .seismic_index import SegyFilesIndex, FieldIndex
 
 from .utils import (FILE_DEPENDEND_COLUMNS, partialmethod, calculate_sdc_for_field, massive_block,
-                    check_unique_fieldrecord_across_surveys)
+                    check_unique_fieldrecord_across_surveys, _crop)
 from .file_utils import write_segy_file
 from .plot_utils import IndexTracker, spectrum_plot, seismic_plot, statistics_plot, gain_plot
 
@@ -1260,7 +1260,8 @@ class SeismicBatch(Batch):
         return self
 
     @action
-    @inbatch_parallel(init='indices', post='_post_random_crop')
+    @inbatch_parallel(init='_init_component')
+    @apply_to_each_component
     def random_crop(self, index, src, num_crops, shape, dst=None):
         """ Random crop from seismograms.
 
@@ -1286,8 +1287,16 @@ class SeismicBatch(Batch):
 
             crop(src='raw', dst='raw_crop', num_crops=10, shape=(10, 10))
         """
+        if not isinstance(self.index, FieldIndex):
+            raise NotImplementedError("Index must be FieldIndex, not {}".format(type(self.index)))
+
         if isinstance(src, str):
-            src = (src,)
+            src = (src, )
+        if dst is None:
+            dst = src
+        elif isinstance(dst, str):
+            dst = (dst, )
+
         pos = self.get_pos(None, src[0], index)
         field = getattr(self, src[0])[pos]
 
@@ -1295,9 +1304,16 @@ class SeismicBatch(Batch):
         if isinstance(num_crops, int) and num_crops > 0:
             x = np.random.randint(field.shape[0]-shape[0], size=num_crops)
             y = np.random.randint(field.shape[1]-shape[1], size=num_crops)
-            return  list(zip(x, y))
+            xy = list(zip(x, y))
+        else:
+            raise ValueError('num_crops must be positive integer, got', num_crops)
 
-        raise ValueError('num_crops must be positive integer, got', num_crops)
+        for isrc, idst in zip(src, dst):
+            field = getattr(self, isrc)[pos]
+            getattr(self, idst)[pos] = _crop(field, xy, shape)
+
+        return self
+
 
     @action
     @inbatch_parallel(init='_init_component')
@@ -1345,24 +1361,15 @@ class SeismicBatch(Batch):
         pos = self.get_pos(None, src[0], index)
         field = getattr(self, src[0])[pos]
 
-        if np.ndim(coords) == 2: # crop the same coords for each seismogramm
-            xy = coords
-        elif (np.ndim(coords) == 3) & (len(coords) == len(self)): # crop individual coords for each seismogramm
+        if isinstance(coords[0][0], (list, tuple)) & (len(coords) == len(self)): # crop individual coords
             xy = coords[pos]
+        elif isinstance(coords[0], (list, tuple)): # crop the same coords for each seismogramm
+            xy = coords
         else:
             raise ValueError('Coords not specified correctly')
 
         for isrc, idst in zip(src, dst):
             field = getattr(self, isrc)[pos]
-
-            # Perfom crop
-            res = np.empty((len(xy), ), dtype='O')
-            for i, (x, y) in enumerate(xy):
-                if (x + shape[0] > field.shape[0]) or (y + shape[1] > field.shape[1]):
-                    raise ValueError('Resulted crop shape are less than expected.')
-
-                res[i] = field[x:x+shape[0], y:y+shape[1]]
-
-            getattr(self, idst)[pos] = res
+            getattr(self, idst)[pos] = _crop(field, xy, shape)
 
         return self
