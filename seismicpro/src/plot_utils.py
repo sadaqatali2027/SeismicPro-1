@@ -540,3 +540,23 @@ def show_2d_heatmap(idf, figsize=None, save_to=None, dpi=300, **kwargs):
     if save_to is not None:
         plt.savefig(save_to, dpi=dpi)
     plt.show()
+
+def error_to_offset(diff, offset, step=100,  title=None, figsize=None):
+    x = np.arange(0, max(offset), step)
+    dig = np.digitize(offset, bins=x)
+
+    mae = []
+    for i in np.unique(dig):
+        ind = np.argwhere(dig == i)
+        err = np.mean(diff[ind])
+        mae.append(err)
+
+    plt.figure(figsize=figsize)
+    plt.bar(np.unique(dig), mae)
+    plt.title(title)
+    plt.text(np.argmin(mae), max(mae) -np.std(mae)/2, str(np.mean(diff))[:4], bbox=dict(fill=False, edgecolor='b', linewidth=1), size=20)
+    plt.show()
+
+        
+
+
