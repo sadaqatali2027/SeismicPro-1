@@ -1255,7 +1255,7 @@ class SeismicBatch(Batch):
         return self
 
     def _post_random_crop(self, coords, **kwargs):
-        _ = kwargs.pop('num_crops')
+        _ = kwargs.pop('num_crops') # pop as the `crop` method does not reqiure this kwarg
         self.crop(coords=coords, **kwargs)
         return self
 
