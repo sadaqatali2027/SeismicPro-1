@@ -1253,14 +1253,14 @@ class SeismicBatch(Batch):
         return self
 
     def _post_random_crop(self, coords, **kwargs):
-        _ = kwargs.pop('n')
+        _ = kwargs.pop('num_crops')
         self.crop(coords=coords, **kwargs)
         return self
 
     @action
     @inbatch_parallel(init='indices', post='_post_random_crop')
     def random_crop(self, index, src, num_crops, shape, dst=None):
-        """ Random crop from the seismograms.
+        """ Random crop from seismograms.
 
         Parameters
         ----------
@@ -1270,7 +1270,7 @@ class SeismicBatch(Batch):
             The batch components to put the result in.
         num_crops: int
             Number of random crops.
-        shape: tupl
+        shape: tuple of ints.
             Crop shape.
 
         Notes
@@ -1282,7 +1282,7 @@ class SeismicBatch(Batch):
 
         ::
 
-            crop(src='raw', dst='raw_crop', n=10, shape=(10, 10))
+            crop(src='raw', dst='raw_crop', num_crops=10, shape=(10, 10))
         """
         if isinstance(src, str):
             src = (src,)
@@ -1300,7 +1300,7 @@ class SeismicBatch(Batch):
     @action
     @inbatch_parallel(init='_init_component')
     def crop(self, index, src, coords, shape, dst=None):
-        """ Crop from the seismograms by given coordinates.
+        """ Crop from seismograms by given coordinates.
 
         Parameters
         ----------
@@ -1344,11 +1344,9 @@ class SeismicBatch(Batch):
         field = getattr(self, src[0])[pos]
 
         if np.ndim(coords) == 2: # crop the same coords for each seismogramm
-            xy = coords # pylint: disable=invalid-name
-
+            xy = coords
         elif (np.ndim(coords) == 3) & (len(coords) == len(self)): # crop individual coords for each seismogramm
-            xy = coords[pos] # pylint: disable=invalid-name
-
+            xy = coords[pos]
         else:
             raise ValueError('Coords not specified correctly')
 
