@@ -115,12 +115,6 @@ def shuffle_folders(path_to_fields, path_to_res, num_experts, params, archive=Fa
                 field_name_new = 'M_{}_{}.sgy'.format(fi, new_idx)
                 field_path_new = os.path.join(field_dir, field_name_new)
 
-                # debugging
-                # print(field_path_old)
-                # print("->")
-                # print(field_path_new)
-                # print()
-
                 shutil.copyfile(field_path_old, field_path_new)
 
                 mapping[expert_name][field_name][field_name_new] = params.models_paths[old_idx]

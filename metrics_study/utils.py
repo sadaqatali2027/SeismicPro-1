@@ -10,16 +10,16 @@ def get_windowed_spectrogram_dists(smgr, smgl, dist_fn='sum_abs',
                                    time_frame_width=100, noverlap=None, window='boxcar'):
     """
     Calculates distances between traces' spectrograms in sliding windows
+
     Parameters
     ----------
-    smgr : np.array of shape (traces count, timestamps)
-    smgl : np.array of shape (traces count, timestamps)
+    smgr, smgl : np.array of shape (traces count, timestamps)
         traces to compute spectrograms on
 
     dist_fn : 'max_abs', 'sum_abs', 'sum_sq' or callable, optional
         function to calculate distance between 2 specrograms for single trace and single time window
         if callable, should accept 2 arrays of shape (traces count, frequencies, segment times)
-        and operate on 2-d axis
+        and operate on second axis
         Default is 'sum_abs'
 
     time_frame_width : int, optional
@@ -27,6 +27,8 @@ def get_windowed_spectrogram_dists(smgr, smgl, dist_fn='sum_abs',
         see ::meth:: scipy.signal.spectrogram
 
     noverlap : int, optional
+        see ::meth:: scipy.signal.spectrogram
+
     window : str or tuple or array_like, optional
         see ::meth:: scipy.signal.spectrogram
 
@@ -74,14 +76,10 @@ def draw_modifications_dist(modifications, traces_frac=0.1, distances='sum_abs',
         dist_fn to pass to get_windowed_spectrogram_dists
         if list is given, all corresponding metrics values are computed
 
-    vmin
-    vmax
-    figsize :
+    vmin, vmax, figsize :
         parameters to pass to pyplot.imshow
 
-    time_frame_width
-    noverlap
-    window :
+    time_frame_width, noverlap, window :
         parameters to pass to get_windowed_spectrogram_dists
 
     n_cols : int or None, optional
@@ -137,20 +135,19 @@ def draw_modifications_dist(modifications, traces_frac=0.1, distances='sum_abs',
     plt.show()
 
 
-def get_modifications_list(batch, i, scale_lift=1):
+def get_modifications_list(batch, i):
     """ get seismic batch components with short names """
     res = []
+    # lift should always be the first component
     if 'lift' in batch.components:
-        res.append((batch.__getattr__('lift')[i] * scale_lift, 'LIFT'))
-    if 'raw' in batch.components:
-        res.append((batch.__getattr__('raw')[i] * scale_lift, 'RAW'))
+        res.append((batch.__getattr__('lift')[i], 'LIFT'))
 
-    res += [(batch.__getattr__(c)[i], c.upper()) for c in batch.components if c not in ('lift', 'raw')]
+    res += [(batch.__getattr__(c)[i], c.upper()) for c in batch.components if c != 'lift']
 
     return res
 
 
-def validate_all(batch, scale_lift=1, traces_frac=0.1, distance='sum_abs',
+def validate_all(batch, traces_frac=0.1, distance='sum_abs',
                  time_frame_width=100, noverlap=None, window='boxcar'):
     """ get metrics for all fields in batch """
     res = []
@@ -158,7 +155,7 @@ def validate_all(batch, scale_lift=1, traces_frac=0.1, distance='sum_abs',
     for i in range(len(batch.index)):
         res.append({})
 
-        modifications = get_modifications_list(batch, i, scale_lift=scale_lift)
+        modifications = get_modifications_list(batch, i)
 
         origin, _ = modifications[0]
         n_traces, _ = origin.shape
