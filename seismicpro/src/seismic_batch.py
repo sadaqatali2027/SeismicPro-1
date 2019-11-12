@@ -64,6 +64,28 @@ TEMPLATE_DOCSTRING = """
 """
 TEMPLATE_DOCSTRING = dedent(TEMPLATE_DOCSTRING).strip()
 
+def index_indicator(index_classes):
+    """ Decorator to indicate an index type compatible with a decorated method.
+
+    Parameters
+    ----------
+    index : tuple of Basesets or its subclasses
+        Index classes that are compatible with decorated method
+
+    Returns
+    -------
+    decorator : callable
+        Decorated method
+    """
+    def index_indicator_decorator(method):
+        def wrapper(self, *args, **kwargs):
+            if not any([isinstance(self.index, index_cls) for index_cls in index_classes]):
+                raise NotImplementedError("Index must be one of {}, not {}".format(
+                    tuple([index_cls.__name__ for index_cls in index_classes]), type(self.index).__name__))
+            method(*args, **kwargs)
+        return wrapper
+    return index_indicator_decorator
+
 def apply_to_each_component(method):
     """Combine list of src items and list dst items into pairs of src and dst items
     and apply the method to each pair.
