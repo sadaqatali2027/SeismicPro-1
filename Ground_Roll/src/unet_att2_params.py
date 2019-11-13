@@ -108,7 +108,12 @@ class UnetAttParams(TFModel):
             m1 = tf.sigmoid(l1 * size_f - arange)
 
             mask = m0 * m1
-            out = raw * (1 - mask) + main * mask
+            
+            mode = kwargs.get('mode', 'filter')
+            if mode == 'noise':
+                out = raw - main * mask
+            else:
+                out = raw * (1 - mask) + main * mask
 
         self.store_to_attr("mask", mask)
         self.store_to_attr("out_lift", out)
