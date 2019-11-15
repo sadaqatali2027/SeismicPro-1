@@ -664,10 +664,23 @@ class SeismicBatch(Batch):
             Batch with new trace sorting.
         """
         _ = args
+        sorting = self.meta[dst]['sorting']
+
         pos = self.get_pos(None, src, index)
         df = self.index.get_df([index])
-        order = np.argsort(df[sort_by].tolist())
+
+        if sorting:
+            if sorting == sort_by:
+                return self
+
+            cols = [sorting, sort_by]
+            sorted_index_df = df[cols].sort_values(sorting)
+            order = np.argsort(sorted_index_df[sort_by].values)
+        else:
+            order = np.argsort(df[sort_by].tolist())
+
         getattr(self, dst)[pos] = getattr(self, src)[pos][order]
+
         if pos == 0:
             self.meta[dst]['sorting'] = sort_by
 
@@ -696,6 +709,10 @@ class SeismicBatch(Batch):
             raise ValueError('traces in `{}` component should be sorted '
                              'before dropping zero traces'.format(src))
 
+        has_same_sorting = all([self.meta[comp]['sorting'] == sorting for comp in self.components])
+        if not has_same_sorting:
+            raise ValueError('all components in batch should have same sorting')
+
         pos = self.get_pos(None, src, index)
         traces = getattr(self, src)[pos]
         mask = list()
@@ -707,11 +724,12 @@ class SeismicBatch(Batch):
             mask.append(np.max(zero_seqs) < num_zero)
         mask = np.array(mask)
 
-        for isrc in self.components:
-            getattr(self, isrc)[pos] = getattr(self, isrc)[pos][mask]
+        for comp in self.components:
+            getattr(self, comp)[pos] = getattr(self, comp)[pos][mask]
 
-        sorted_index_df = self.index.get_df(index)[(INDEX_UID, sorting)].sort_values(sorting)
-        order = np.argsort(sorted_index_df[INDEX_UID].values)
+        cols = [(INDEX_UID, src), (sorting, '')]
+        sorted_index_df = self.index.get_df(index)[cols].sort_values(sorting)
+        order = np.argsort(sorted_index_df[cols[0]].values)
         return mask[order]
 
     @action
