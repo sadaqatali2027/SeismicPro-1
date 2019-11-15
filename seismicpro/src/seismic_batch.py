@@ -719,7 +719,7 @@ class SeismicBatch(Batch):
         """
         _ = kwargs
         sorting = self.meta[src]['sorting']
-        if sorting is None:
+        if sorting is None and isinstance(self.index, FieldIndex):
             raise ValueError('traces in `{}` component should be sorted '
                              'before dropping zero traces'.format(src))
 
