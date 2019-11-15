@@ -176,7 +176,7 @@ class SeismicBatch(Batch):
         Parameters
         ----------
         mask : list
-            list of arrays bool arrays
+            list of boolean arrays
 
         Returns
         -------
@@ -185,8 +185,8 @@ class SeismicBatch(Batch):
 
         Note
         ----
-        All batch items in each component should be filtered in decorated action.
-        This post function created new instance of SeismicBatch with new index
+        Batch items in each component should be filtered in decorated action.
+        This post function creates new instance of SeismicBatch with new index
         instance.
         """
         _ = args, kwargs
@@ -692,8 +692,8 @@ class SeismicBatch(Batch):
     def drop_zero_traces(self, index, src, num_zero, **kwargs):
         """Drop traces with sequence of zeros longer than ```num_zero```.
 
-        This action drops traces from index instance and from all components
-        in batch according to the mask obtined calculated on `src` component.
+        This action drops traces from index dataframe and from all batch components
+        according to the mask calculated on `src` component.
 
         Parameters
         ----------
