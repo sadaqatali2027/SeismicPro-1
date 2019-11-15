@@ -16,6 +16,7 @@ from .utils import (FILE_DEPENDEND_COLUMNS, partialmethod, calculate_sdc_for_fie
 from .file_utils import write_segy_file
 from .plot_utils import IndexTracker, spectrum_plot, seismic_plot, statistics_plot, gain_plot
 
+INDEX_UID = 'TRACE_SEQUENCE_FILE'
 
 PICKS_FILE_HEADERS = ['FieldRecord', 'TraceNumber', 'timeOffset']
 
@@ -175,30 +176,26 @@ class SeismicBatch(Batch):
         Parameters
         ----------
         mask : list
-            List of masks if ``src`` is ``str``
-            or list of lists if ``src`` is list.
+            list of arrays bool arrays
 
         Returns
         -------
             : SeismicBatch
-            New batch class of filtered components.
+            New batch with filtered components and new index.
 
         Note
         ----
         All components will be changed with given mask and during the proccess,
-        new SeismicBatch instance will be created.
+        new SeismicBatch instance will be created with new index.
         """
+        _ = args, kwargs
         if any_action_failed(mask):
             all_errors = [error for error in mask if isinstance(error, Exception)]
             print(all_errors)
             raise ValueError(all_errors)
 
-        _ = args
-        src = kwargs.get('src', None)
-        src = (src, ) if isinstance(src, str) else src
-
-        mask = np.concatenate((np.array(mask)))
-        new_idf = self.index.get_df(index=np.hstack((mask)), reset=False)
+        mask = np.concatenate(mask)
+        new_idf = self.index.get_df(index=mask, reset=False)
         new_index = new_idf.index.unique()
 
         batch_index = type(self.index).from_index(index=new_index, idf=new_idf,
@@ -211,11 +208,11 @@ class SeismicBatch(Batch):
         for comp in batch.components:
             setattr(batch, comp, np.array([None] * len(batch.index)))
 
-        for i, index in enumerate(new_index):
+        for index in new_index:
             for isrc in batch.components:
-                pos = self.get_pos(None, isrc, index)
-                new_data = getattr(self, isrc)[pos][mask[pos]]
-                getattr(batch, isrc)[i] = new_data
+                pos_batch = batch.get_pos(None, isrc, index)
+                pos_self = self.get_pos(None, isrc, index)
+                getattr(batch, isrc)[pos_batch] = getattr(self, isrc)[pos_self]
         return batch
 
     def trace_headers(self, header, flatten=False):
@@ -569,7 +566,7 @@ class SeismicBatch(Batch):
         _ = src, args
         pos = self.get_pos(None, "indices", index)
         path = index
-        trace_seq = self.index.get_df([index])[('TRACE_SEQUENCE_FILE', src)]
+        trace_seq = self.index.get_df([index])[(INDEX_UID, src)]
         if tslice is None:
             tslice = slice(None)
 
@@ -678,7 +675,6 @@ class SeismicBatch(Batch):
 
     @action
     @inbatch_parallel(init="indices", post='_post_filter_by_mask', target="threads")
-    @apply_to_each_component
     def drop_zero_traces(self, index, src, num_zero, **kwargs):
         """Drop traces with sequence of zeros longer than ```num_zero```.
 
@@ -695,13 +691,28 @@ class SeismicBatch(Batch):
             Batch without dropped traces.
         """
         _ = kwargs
+        sorting = self.meta[src]['sorting']
+        if sorting is None:
+            raise ValueError('traces in `{}` component should be sorted '
+                             'before dropping zero traces'.format(src))
+
         pos = self.get_pos(None, src, index)
         traces = getattr(self, src)[pos]
         mask = list()
-        for _, trace in enumerate(traces != 0):
-            diff_zeros = np.diff(np.append(np.where(trace)[0], len(trace)))
-            mask.append(False if len(diff_zeros) == 0 else np.max(diff_zeros) < num_zero)
-        return mask
+        for trace in traces:
+            nonzero_indices = np.nonzero(trace)[0]
+            # add -1 and len(trace) indices to count leading and trailing zero sequences
+            nonzero_indices = np.concatenate(([-1], nonzero_indices, [len(trace)]))
+            zero_seqs = np.diff(nonzero_indices) - 1
+            mask.append(np.max(zero_seqs) < num_zero)
+        mask = np.array(mask)
+
+        for isrc in self.components:
+            getattr(self, isrc)[pos] = getattr(self, isrc)[pos][mask]
+
+        sorted_index_df = self.index.get_df(index)[(INDEX_UID, sorting)].sort_values(sorting)
+        order = np.argsort(sorted_index_df[INDEX_UID].values)
+        return mask[order]
 
     @action
     @inbatch_parallel(init='_init_component')
