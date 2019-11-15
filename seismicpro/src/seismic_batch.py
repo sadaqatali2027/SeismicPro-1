@@ -709,7 +709,7 @@ class SeismicBatch(Batch):
 
         Raises
         ------
-        ValueError : if `src` has no sorting
+        ValueError : if `src` has no sorting and batch index is FieldIndex
         ValueError : if any component in batch has sorting different from `src`
 
         Note
