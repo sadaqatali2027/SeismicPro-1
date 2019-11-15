@@ -185,8 +185,9 @@ class SeismicBatch(Batch):
 
         Note
         ----
-        All components will be changed with given mask and during the proccess,
-        new SeismicBatch instance will be created with new index.
+        All batch items in each component should be filtered in decorated action.
+        This post function created new instance of SeismicBatch with new index
+        instance.
         """
         _ = args, kwargs
         if any_action_failed(mask):
@@ -691,6 +692,9 @@ class SeismicBatch(Batch):
     def drop_zero_traces(self, index, src, num_zero, **kwargs):
         """Drop traces with sequence of zeros longer than ```num_zero```.
 
+        This action drops traces from index instance and from all components
+        in batch according to the mask obtined calculated on `src` component.
+
         Parameters
         ----------
         num_zero : int
@@ -702,6 +706,16 @@ class SeismicBatch(Batch):
         -------
             : SeismicBatch
             Batch without dropped traces.
+
+        Raises
+        ------
+        ValueError : if `src` has no sorting
+        ValueError : if any component in batch has sorting different from `src`
+
+        Note
+        ----
+        This action creates new instance of SeismicBatch with new index
+        instance.
         """
         _ = kwargs
         sorting = self.meta[src]['sorting']
