@@ -541,7 +541,8 @@ def show_2d_heatmap(idf, figsize=None, save_to=None, dpi=300, **kwargs):
         plt.savefig(save_to, dpi=dpi)
     plt.show()
 
-def error_to_offset(diff, offset, step=100,  title=None, figsize=None):
+def error_to_offset(diff, offset, step=100, title=None, figsize=None):
+    """ Plot diff to binarize scatter"""
     x = np.arange(0, max(offset), step)
     dig = np.digitize(offset, bins=x)
 
@@ -554,9 +555,6 @@ def error_to_offset(diff, offset, step=100,  title=None, figsize=None):
     plt.figure(figsize=figsize)
     plt.bar(np.unique(dig), mae)
     plt.title(title)
-    plt.text(np.argmin(mae), max(mae) -np.std(mae)/2, str(np.mean(diff))[:4], bbox=dict(fill=False, edgecolor='b', linewidth=1), size=20)
+    plt.text(np.argmin(mae), max(mae) -np.std(mae)/2, str(np.mean(diff))[:4],
+             bbox=dict(fill=False, edgecolor='b', linewidth=1), size=20)
     plt.show()
-
-        
-
-

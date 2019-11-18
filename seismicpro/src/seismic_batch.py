@@ -492,8 +492,8 @@ class SeismicBatch(Batch):
         df = df.reset_index(drop=self.index.name is None)[columns]
         df.columns = df.columns.droplevel(1)
 
-        if not os.path.isfile(path): 
-            df.to_csv(path, index=False, header=True, mode='a') 
+        if not os.path.isfile(path):
+            df.to_csv(path, index=False, header=True, mode='a')
         else:
             df.to_csv(path, index=False, header=None, mode='a')
         return self
@@ -1383,7 +1383,7 @@ class SeismicBatch(Batch):
         dst_data = np.split(dst_data, ind)
         setattr(self, dst, np.array([i for i in dst_data] + [None])[:-1])
         return self
-    
+
     @action
     @inbatch_parallel(init='_init_component', target="threads")
     def shift_pick(self, index, src, dst=None, src_raw='raw', shift=1.5*np.pi, thd=0.05):
