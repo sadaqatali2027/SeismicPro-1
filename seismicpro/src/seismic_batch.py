@@ -19,7 +19,7 @@ from .file_utils import write_segy_file
 from .plot_utils import IndexTracker, spectrum_plot, seismic_plot, statistics_plot, gain_plot
 
 
-PICKS_FILE_HEADERS = ['FieldRecord', 'TraceNumber', 'timeOffset']
+PICKS_FILE_HEADERS = ['FieldRecord', 'TraceNumber', 'FIRST_BREAK_TIME']
 
 
 ACTIONS_DICT = {
@@ -450,7 +450,7 @@ class SeismicBatch(Batch):
         return self
 
     @action
-    def _dump_picking(self, src, path, traces, to_samples, columns=None, max_len=(6, 4)):
+    def _dump_picking(self, src, path, traces, to_samples, columns=None):
         """Dump picking to file.
 
         Parameters
@@ -488,15 +488,14 @@ class SeismicBatch(Batch):
         if isinstance(self.index, KNNIndex):
             df = df.iloc[::5, :]
 
-        df['timeOffset'] = data.astype(int)
+        df[PICKS_FILE_HEADERS[-1]] = data.astype(int)
         df = df.reset_index(drop=self.index.name is None)[columns]
         df.columns = df.columns.droplevel(1)
 
-        with open(path, 'a') as f:
-            for row in df.iterrows():
-                for i, item in enumerate(row[1][:-1]):
-                    f.write(str(item).ljust(max_len[i] + 8))
-                f.write(str(row[1][-1]) + '\n')
+        if not os.path.isfile(path): 
+            df.to_csv(path, index=False, header=True, mode='a') 
+        else:
+            df.to_csv(path, index=False, header=None, mode='a')
         return self
 
     @action
@@ -938,7 +937,7 @@ class SeismicBatch(Batch):
                 picking = getattr(self, sp)[pos].copy()
                 if pick_to_samples:
                     rate = self.meta[src[0]]['interval'] / 1e3
-                    picking /= rate
+                    picking = picking / rate
                 pts_picking.append((range(len(picking)), picking))
         else:
             pts_picking = None
