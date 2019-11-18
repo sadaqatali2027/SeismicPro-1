@@ -9,7 +9,7 @@ import segyio
 
 from ..batchflow import action, inbatch_parallel, Batch, any_action_failed
 
-from .seismic_index import SegyFilesIndex, FieldIndex
+from .seismic_index import SegyFilesIndex, FieldIndex, KNNIndex
 
 from .utils import (FILE_DEPENDEND_COLUMNS, partialmethod, calculate_sdc_for_field, massive_block,
                     check_unique_fieldrecord_across_surveys)
@@ -18,7 +18,7 @@ from .plot_utils import IndexTracker, spectrum_plot, seismic_plot, statistics_pl
 
 INDEX_UID = 'TRACE_SEQUENCE_FILE'
 
-PICKS_FILE_HEADERS = ['FieldRecord', 'TraceNumber', 'timeOffset']
+PICKS_FILE_HEADERS = ['FieldRecord', 'TraceNumber', 'FIRST_BREAK_TIME']
 
 
 ACTIONS_DICT = {
@@ -446,7 +446,7 @@ class SeismicBatch(Batch):
         return self
 
     @action
-    def _dump_picking(self, src, path, traces, to_samples, columns=None):
+    def _dump_picking(self, src, path, traces, to_samples, columns=None, max_len=(6, 4), poly_style=False):
         """Dump picking to file.
 
         Parameters
@@ -480,13 +480,25 @@ class SeismicBatch(Batch):
             df = df.sort_values(by=sort_by)
 
         df = df.loc[self.indices]
-        df['timeOffset'] = data.astype(int)
+
+        if isinstance(self.index, KNNIndex):
+            df = df.iloc[::5, :]
+
+        df['FIRST_BREAK_TIME'] = data.astype(int)
         df = df.reset_index(drop=self.index.name is None)[columns]
         df.columns = df.columns.droplevel(1)
 
-        for i in [0, 2, 4]:
-            df.insert(i, str(i), "")
-        df.to_csv(path, index=False, sep='\t', header=False, encoding='ascii', mode='a')
+        if not poly_style:
+            if not os.path.isfile(path): 
+                df.to_csv(path, index=False, header=True, mode='a') # sep='\t'
+            else:
+                df.to_csv(path, index=False, header=None, mode='a')
+        else:
+            with open(path, 'a') as f:
+                for row in df.iterrows():
+                    for i, item in enumerate(row[1][:-1]):
+                        f.write(str(item).ljust(max_len[i] + 8))
+                    f.write(str(row[1][-1]) + '\n')
         return self
 
     @action

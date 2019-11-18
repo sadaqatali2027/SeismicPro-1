@@ -16,7 +16,7 @@ class SeismicDataset(Dataset):
         super().__init__(index, batch_class=batch_class, preloaded=preloaded, *args, **kwargs)
 
     def find_sdc_params(self, component, speed, loss, indices=None, time=None, initial_point=None,
-                        method='Powell', bounds=None, tslice=None, **kwargs):
+                        method='SLSQP', bounds=None, tslice=None, **kwargs):
         """ Finding an optimal parameters for correction of spherical divergence.
 
         Parameters
