@@ -529,3 +529,13 @@ def show_2d_heatmap(idf, figsize=None, save_to=None, dpi=300, **kwargs):
     if save_to is not None:
         plt.savefig(save_to, dpi=dpi)
     plt.show()
+
+def traces_plot(raw, target, predict, figsize=(18,16)):
+    f, axes = plt.subplots(3, 1, figsize=(20, 12))
+    names = ['raw', 'target', 'predict']
+    data = raw, target, predict
+    for i in range(3):
+        axes[i].set_title(names[i])
+        axes[i].plot(data[i][0])
+        axes[i].grid(True)
+    plt.show()
