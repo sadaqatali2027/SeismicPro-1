@@ -450,7 +450,7 @@ class SeismicBatch(Batch):
         return self
 
     @action
-    def _dump_picking(self, src, path, traces, to_samples, columns=None):
+    def _dump_picking(self, src, path, traces='raw', to_samples=True, columns=None):
         """Dump picking to file.
 
         Parameters
@@ -459,9 +459,9 @@ class SeismicBatch(Batch):
             Source to get picking from.
         path : str
             Output file path.
-        traces : str
+        traces : str, default 'raw
             Batch component with corresponding traces.
-        to_samples : bool
+        to_samples : bool, default True
             Should be picks converted to time samples.
         columns: array_like, optional
             Columns to include in the output file. See PICKS_FILE_HEADERS for default format.
