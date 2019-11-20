@@ -802,3 +802,20 @@ def check_unique_fieldrecord_across_surveys(surveys_by_fieldrecord, index):
     """
     if len(surveys_by_fieldrecord) != 1:
         raise ValueError('Field {} represents data from more than one survey!'.format(index))
+
+def transform_pickingstyle_polytech(path, max_len=(6, 4)):
+    """ Transforms the format of the csv file with dumped picking to the format acceptible by polytech server.
+    That means that all columns, no matter how many digits it contains, should be separated by 8 spaces.
+     Parameters
+    ----------
+    path : str
+        Path to the file with picking.
+    max_len : tuple, default is (6, 4)
+        The number of maximum digits each columns except last contains
+    """
+    df = pd.read_csv(path)
+    with open(path + 'dump', 'w') as f:
+        for row in df.iterrows():
+            for i, item in enumerate(row[1][:-1]):
+                f.write(str(item).ljust(max_len[i] + 8))
+            f.write(str(row[1][-1]) + '\n')
