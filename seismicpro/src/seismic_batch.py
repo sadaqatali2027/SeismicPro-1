@@ -1266,21 +1266,18 @@ class SeismicBatch(Batch):
         pos = self.get_pos(None, src, index)
         pick = getattr(self, src)[pos]
         trace = getattr(self, src_raw)[pos]
-
         if isinstance(self.index, KNNIndex):
             trace = trace[0]
-
         trace = np.squeeze(trace)
 
         analytic = hilbert(trace)
         phase = np.unwrap(np.angle(analytic))
 
         phase_diff = phase[pick] - shift
-        phase_mod = np.abs(phase - phase_diff)
-        zero = phase_mod.argmin()
-
-        n_skip = (np.abs(trace[zero:]) > thd).argmax() - 1
+        phase_mod = phase - phase_diff
+        phase_mod[phase_mod < 0] = 0
+        zero = len(phase_mod) - phase_mod[::-1].argmin() - 1
+        n_skip = max((np.abs(trace[zero:]) > thd).argmax() - 1, 0)
         zero += n_skip
-
         getattr(self, dst)[pos] = zero
         return self
