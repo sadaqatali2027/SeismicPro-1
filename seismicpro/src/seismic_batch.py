@@ -18,7 +18,7 @@ from .file_utils import write_segy_file
 from .plot_utils import IndexTracker, spectrum_plot, seismic_plot, statistics_plot, gain_plot
 
 
-PICKS_FILE_HEADERS = ['FieldRecord', 'TraceNumber', 'timeOffset']
+PICKS_FILE_HEADERS = ['FieldRecord', 'TraceNumber', 'FIRST_BREAK_TIME']
 
 
 ACTIONS_DICT = {
@@ -449,7 +449,7 @@ class SeismicBatch(Batch):
         return self
 
     @action
-    def _dump_picking(self, src, path, traces, to_samples, columns=None, max_len=(6, 4)):
+    def _dump_picking(self, src, path, traces='raw', to_samples=True, columns=None):
         """Dump picking to file.
 
         Parameters
@@ -458,9 +458,9 @@ class SeismicBatch(Batch):
             Source to get picking from.
         path : str
             Output file path.
-        traces : str
+        traces : str, default 'raw'
             Batch component with corresponding traces.
-        to_samples : bool
+        to_samples : bool, default True
             Should be picks converted to time samples.
         columns: array_like, optional
             Columns to include in the output file. See PICKS_FILE_HEADERS for default format.
@@ -487,15 +487,14 @@ class SeismicBatch(Batch):
         if isinstance(self.index, KNNIndex):
             df = df.iloc[::5, :]
 
-        df['timeOffset'] = data.astype(int)
+        df[PICKS_FILE_HEADERS[-1]] = data.astype(int)
         df = df.reset_index(drop=self.index.name is None)[columns]
         df.columns = df.columns.droplevel(1)
 
-        with open(path, 'a') as f:
-            for row in df.iterrows():
-                for i, item in enumerate(row[1][:-1]):
-                    f.write(str(item).ljust(max_len[i] + 8))
-                f.write(str(row[1][-1]) + '\n')
+        if not os.path.isfile(path):
+            df.to_csv(path, index=False, header=True, mode='a')
+        else:
+            df.to_csv(path, index=False, header=None, mode='a')
         return self
 
     @action
@@ -1129,13 +1128,8 @@ class SeismicBatch(Batch):
         if not labels:
             data = np.argmax(data, axis=1)
 
-<<<<<<< HEAD
-        dst_data = massive_block(np.stack(data))
-        setattr(self, dst, np.array([i for i in dst_data] + [None])[:-1])
-=======
         dst_data = massive_block(data)
         setattr(self, dst, np.array(dst_data + [None])[:-1]) # array implicitly converted to object dtype
->>>>>>> master
         return self
 
     @action
