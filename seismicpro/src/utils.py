@@ -806,12 +806,15 @@ def check_unique_fieldrecord_across_surveys(surveys_by_fieldrecord, index):
 def transform_pickingstyle_polytech(path, max_len=(6, 4)):
     """ Transforms the format of the csv file with dumped picking to the format acceptible by polytech server.
     That means that all columns, no matter how many digits it contains, should be separated by 8 spaces.
-     Parameters
+    Most of the time 2 columns 'FieldRecord' and 'TraceNumber' contains of 6 and 4 digits respectively, however,
+    it may vary from segy to segy.
+
+    Parameters
     ----------
     path : str
         Path to the file with picking.
     max_len : tuple, default is (6, 4)
-        The number of maximum digits each columns except last contains
+        The number of maximum digits each column except last contains
     """
     df = pd.read_csv(path)
     with open(path + 'dump', 'w') as f:
