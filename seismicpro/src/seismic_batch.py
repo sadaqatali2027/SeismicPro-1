@@ -1263,7 +1263,24 @@ class SeismicBatch(Batch):
     @action
     @inbatch_parallel(init='_init_component', target="threads")
     def shift_pick(self, index, src, dst=None, src_raw='raw', shift=1.5*np.pi, thd=0.05):
-        """ Shifts picking time on given phase"""
+        """ Shifts picking time stored in `src` component on the given phase along the traces stored in `src_raw`.
+
+        Parameters
+        ----------
+        src : str
+            The batch components to get the data from.
+        dst : str
+            The batch components to put the result in.
+        src_raw: str
+            The batch components where the traces are stored, default 'raw'
+        shift: float
+            The amount of phase to shift, default is 1.5 * np.pi which corresponds to transfering picking times
+            from 'max' to 'zero' type.
+        thd: float
+            Threshold determining how many trace samples with low amplitudes, less then thd, can be skipped.
+            Introduced because of the unstable behaviour of the hilbert transform at the begining of the signal.
+
+         """
         pos = self.get_pos(None, src, index)
         pick = getattr(self, src)[pos]
         trace = getattr(self, src_raw)[pos]
@@ -1273,11 +1290,11 @@ class SeismicBatch(Batch):
 
         analytic = hilbert(trace)
         phase = np.unwrap(np.angle(analytic))
-
-        phase_diff = phase[pick] - shift
-        phase_mod = phase - phase_diff
+        # finding x such that phase[x] = phase[pick] - shift
+        phase_mod = phase - phase[pick] + shift
         phase_mod[phase_mod < 0] = 0
-        zero = len(phase_mod) - phase_mod[::-1].argmin() - 1
+        zero = len(phase_mod) - phase_mod[::-1].argmin() - 1 # in case phase_mod reaches 0 find the index of last one
+        # skip the trace samples with amplitudes < thd, starting from the `zero` sample
         n_skip = max((np.abs(trace[zero:]) > thd).argmax() - 1, 0)
         zero += n_skip
         getattr(self, dst)[pos] = zero
