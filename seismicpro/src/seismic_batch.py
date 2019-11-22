@@ -665,7 +665,7 @@ class SeismicBatch(Batch):
             Batch with new trace sorting.
         """
         _ = args
-        sorting = self.meta[dst]['sorting']
+        sorting = self.meta[src]['sorting']
 
         pos = self.get_pos(None, src, index)
         df = self.index.get_df([index])
@@ -678,7 +678,7 @@ class SeismicBatch(Batch):
             sorted_index_df = df[cols].sort_values(sorting)
             order = np.argsort(sorted_index_df[sort_by].values)
         else:
-            order = np.argsort(df[sort_by].tolist())
+            order = np.argsort(df[sort_by].values)
 
         getattr(self, dst)[pos] = getattr(self, src)[pos][order]
 
@@ -741,10 +741,12 @@ class SeismicBatch(Batch):
         for comp in self.components:
             getattr(self, comp)[pos] = getattr(self, comp)[pos][mask]
 
-        cols = [(INDEX_UID, src), (sorting, '')]
-        sorted_index_df = self.index.get_df(index)[cols].sort_values(sorting)
-        order = np.argsort(sorted_index_df[cols[0]].values)
-        return mask[order]
+        if sorting:
+            cols = [(INDEX_UID, src), (sorting, '')]
+            sorted_index_df = self.index.get_df([index])[cols].sort_values(sorting)
+            order = np.argsort(sorted_index_df[cols[0]].values)
+            return mask[order]
+        return mask
 
     @action
     @inbatch_parallel(init='_init_component')
