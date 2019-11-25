@@ -63,7 +63,7 @@ def predict(path_raw, path_model, num_zero, save_to, batch_size, trace_len, devi
     device: str or torch.device, default: 'cpu'
         The device used for inference. Can be 'gpu' in case of avaliavle GPU.
     shift: int, default: 0
-        Picking time correction for the given shift.
+        Alter the picking times for each trace on the given phase shift. Multiplied by `pi`.
 
     """
     data = SeismicDataset(TraceIndex(name='raw', path=path_raw))
