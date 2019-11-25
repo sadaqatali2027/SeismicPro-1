@@ -4,6 +4,7 @@ import tensorflow as tf
 
 from . import UnetAtt
 from ..batchflow.batchflow.models.tf import EncoderDecoder
+from ..batchflow.batchflow.models.tf.layers import conv_block
 
 
 class UnetAttention3(UnetAtt):
@@ -33,7 +34,7 @@ class UnetAttention3(UnetAtt):
         decoder = kwargs.pop('decoder')
         attention = kwargs.pop('attention')
 
-        raw, offset = inputs
+        raw = inputs
 
         with tf.variable_scope(name):
             # Encoder: transition down
@@ -58,12 +59,20 @@ class UnetAttention3(UnetAtt):
                 decoder_args = {**kwargs, **decoder}
                 main = cls.decoder(encoder_outputs[::-1], name='decoder', **decoder_args)
 
+                # Get a single channel with linear activation for the main branch
+                main = conv_block(main, layout='c', filters=1, units=1, name='head_main')
+
+
             # Attention: transition up
             if attention is not None:
                 attention_args = {**kwargs, **attention}
                 att = cls.decoder(encoder_outputs[::-1], name='attention', **attention_args)
 
-        return main, att, raw, offset
+                # Get a single channel with sigmoid activation for the attention branch
+                att = conv_block(att, layout='ca', kernel_size=3, filters=1, units=1,
+                             activation=tf.nn.sigmoid, name='head_att')
+
+        return main, att, raw
 
 
 class UnetAttention4(UnetAtt):
@@ -101,7 +110,7 @@ class UnetAttention4(UnetAtt):
         decoder = kwargs.pop('decoder')
         attention = kwargs.pop('attention')
 
-        raw, offset = inputs
+        raw = inputs
 
         with tf.variable_scope(name):
             # Encoder: transition down
@@ -131,4 +140,11 @@ class UnetAttention4(UnetAtt):
                 decoder_args = {**kwargs, **decoder}
                 main = cls.branch([emb] + att[:-1], name='decoder', **decoder_args)
 
-        return main[-1], att[-1], raw, offset
+            # Get a single channel with sigmoid activation for the attention branch
+            att = conv_block(att[-1], layout='ca', kernel_size=3, filters=1, units=1,
+                             activation=tf.nn.sigmoid, name='head_att')
+
+            # Get a single channel with linear activation for the main branch
+            main = conv_block(main[-1], layout='c', filters=1, units=1, name='head_main')
+
+        return main, att, raw

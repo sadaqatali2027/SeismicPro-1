@@ -1,7 +1,9 @@
 """ utilities """
 from functools import reduce
 
-from seismicpro.batchflow import Pipeline
+import numpy as np
+
+from seismicpro.batchflow import Pipeline, V, B
 
 from seismicpro.src import FieldIndex, SeismicDataset
 
