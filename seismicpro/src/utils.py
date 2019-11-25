@@ -803,16 +803,17 @@ def check_unique_fieldrecord_across_surveys(surveys_by_fieldrecord, index):
     if len(surveys_by_fieldrecord) != 1:
         raise ValueError('Field {} represents data from more than one survey!'.format(index))
 
-def transform_pickingstyle_polytech(path, max_len=(6, 4)):
-    """ Transforms the format of the csv file with dumped picking to the format acceptible by polytech server.
-    That means that all columns, no matter how many digits it contains, should be separated by 8 spaces.
-    Most of the time 2 columns 'FieldRecord' and 'TraceNumber' contains of 6 and 4 digits respectively, however,
-    it may vary from segy to segy.
+def transform_to_fixed_width_columns(path, n_spaces=8, max_len=(6, 4)):
+    """ Transforms the format of csv file with dumped picking so all the columns are separated by `n_spaces` spaces.
+    Most of the time columns 'FieldRecord' and 'TraceNumber' contains of 6 and 4 digits respectively,
+    however, it may vary. Such transform makes it compatible with specific seismic processing software.
 
     Parameters
     ----------
     path : str
         Path to the file with picking.
+    n_spaces : int, default is 8
+        The number of spaces separating columns.
     max_len : tuple, default is (6, 4)
         The number of maximum digits each column except last contains
     """
@@ -820,5 +821,5 @@ def transform_pickingstyle_polytech(path, max_len=(6, 4)):
     with open(path + 'dump', 'w') as f:
         for row in df.iterrows():
             for i, item in enumerate(row[1][:-1]):
-                f.write(str(item).ljust(max_len[i] + 8))
+                f.write(str(item).ljust(max_len[i] + n_spaces))
             f.write(str(row[1][-1]) + '\n')
