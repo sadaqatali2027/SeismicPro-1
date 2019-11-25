@@ -665,7 +665,10 @@ class SeismicBatch(Batch):
             Batch with new trace sorting.
         """
         _ = args
-        sorting = self.meta[src]['sorting']
+        if src in self.meta.keys():
+            sorting = self.meta[src].get('sorting')
+        else:
+            sorting = None
 
         pos = self.get_pos(None, src, index)
         df = self.index.get_df([index])
