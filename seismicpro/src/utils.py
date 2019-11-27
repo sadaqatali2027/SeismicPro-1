@@ -825,11 +825,22 @@ def transform_to_fixed_width_columns(path, path_save=None, n_spaces=8, max_len=(
     max_len : tuple, default is (6, 4)
         The number of maximum digits each column except last contains
     """
+    if path_save is not None:
+        write_object = open(path_save, 'w')
+    # in case you want to overwrite the existing file, temporary file would be created.
+    # the intermediate results would be saved to this temp file, in the end original file
+    # would be replaced with temporary one, afterwards temp file deleted
+    else:
+        write_object = tempfile.NamedTemporaryFile(mode='w', delete=True)
+
     with open(path, 'r', newline='') as read_file:
         reader = csv.reader(read_file)
-        with tempfile.NamedTemporaryFile(mode='w') as write_file:
+        with write_object as write_file:
             for row in reader:
                 for i, item in enumerate(row[:-1]):
                     write_file.write(str(item).ljust(max_len[i] + n_spaces))
                 write_file.write(str(row[-1]) + '\n')
-            shutil.copyfile(write_file.name, path_save or path)
+
+            if path_save:
+                return
+            shutil.copyfile(write_file.name, path)
