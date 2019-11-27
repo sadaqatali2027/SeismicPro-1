@@ -28,7 +28,7 @@ def make_prediction():
     parser.add_argument('-bs', '--batch_size', type=int, help="The number of traces in \
                         the batch for inference stage.", default=1000)
     parser.add_argument('-ts', '--trace_len', type=int, help="The number of first samples \
-                        of the trace to load.", default=751)
+                        of the trace to load.", default=1000)
     parser.add_argument('-dvc', '--device', type=str, help="The device for \
                         inference. Can be 'cpu' or 'gpu'.", default='cpu')
     parser.add_argument('-s', '--shift', type=float, help="Picking time phase shift", default=0)
@@ -43,7 +43,7 @@ def make_prediction():
     shift = args.shift
     predict(path_raw, model, num_zero, save_to, batch_size, trace_len, device, shift)
 
-def predict(path_raw, path_model, num_zero, save_to, batch_size, trace_len, device, shift):
+def predict(path_raw, path_model, num_zero=100, save_to='dump.csv', batch_size=1000, trace_len=1000, device='cpu', shift=0):
     """Make predictions and dump results using loaded model and path to data.
 
     Parameters
