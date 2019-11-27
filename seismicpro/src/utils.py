@@ -1,5 +1,9 @@
 """ Seismic batch tools """
+import csv
+import shutil
+import tempfile
 import functools
+
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
@@ -803,23 +807,29 @@ def check_unique_fieldrecord_across_surveys(surveys_by_fieldrecord, index):
     if len(surveys_by_fieldrecord) != 1:
         raise ValueError('Field {} represents data from more than one survey!'.format(index))
 
-def transform_to_fixed_width_columns(path, n_spaces=8, max_len=(6, 4)):
+
+def transform_to_fixed_width_columns(path, path_save=None, n_spaces=8, max_len=(6, 4)):
     """ Transforms the format of csv file with dumped picking so all the columns are separated by `n_spaces` spaces.
+    Such transform makes it compatible with specific seismic processing software.
     Most of the time columns 'FieldRecord' and 'TraceNumber' contains of 6 and 4 digits respectively,
-    however, it may vary. Such transform makes it compatible with specific seismic processing software.
+    however, it may vary.
 
     Parameters
     ----------
     path : str
         Path to the file with picking.
+    path_save : str, optional
+        Path where the result would be stored. By default the file would be overwritten.
     n_spaces : int, default is 8
         The number of spaces separating columns.
     max_len : tuple, default is (6, 4)
         The number of maximum digits each column except last contains
     """
-    df = pd.read_csv(path)
-    with open(path + 'dump', 'w') as f:
-        for row in df.iterrows():
-            for i, item in enumerate(row[1][:-1]):
-                f.write(str(item).ljust(max_len[i] + n_spaces))
-            f.write(str(row[1][-1]) + '\n')
+    with open(path, 'r', newline='') as read_file:
+        reader = csv.reader(read_file)
+        with tempfile.NamedTemporaryFile(mode='w') as write_file:
+            for row in reader:
+                for i, item in enumerate(row[:-1]):
+                    write_file.write(str(item).ljust(max_len[i] + n_spaces))
+                write_file.write(str(row[-1]) + '\n')
+            shutil.copyfile(write_file.name, path_save or path)
