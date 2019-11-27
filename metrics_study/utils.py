@@ -136,7 +136,69 @@ def draw_modifications_dist(modifications, traces_frac=0.1, distances='sum_abs',
 
     plt.show()
 
+    
+def spectrum_plot_with_metrics(arrs, frame, rate, max_freq=None, names=None,
+                  figsize=None, save_to=None, **kwargs):
+    """
+    Plot seismogram(s) and power spectrum of given region in the seismogram(s) 
+    and show distances computed relative to 1-st given seismogram
+    
+    Parameters
+    ----------
+    arrs : array-like
+        Seismogram or sequence of seismograms.
+    frame : tuple
+        List of slices that frame region of interest.
+    rate : scalar
+        Sampling rate.
+    max_freq : scalar
+        Upper frequence limit.
+    names : str or array-like, optional
+        Title names to identify subplots.
+    figsize : array-like, optional
+        Output plot size.
+    save_to : str or None, optional
+        If not None, save plot to given path.
+    kwargs : dict
+        Named argumets to matplotlib.pyplot.imshow.
+    
+    """
 
+    if isinstance(arrs, np.ndarray) and arrs.ndim == 2:
+        arrs = (arrs,)
+
+    if isinstance(names, str):
+        names = (names,)
+        
+    origin = arrs[0]
+    n_use_traces = frame[0].stop - frame[0].start
+
+    _, ax = plt.subplots(2, len(arrs), figsize=figsize, squeeze=False)
+    for i, arr in enumerate(arrs):
+        ax[0, i].imshow(arr.T, **kwargs)
+        rect = patches.Rectangle((frame[0].start, frame[1].start),
+                                 frame[0].stop - frame[0].start,
+                                 frame[1].stop - frame[1].start,
+                                 edgecolor='r', facecolor='none', lw=2)
+        ax[0, i].add_patch(rect)
+        
+        dist_m = get_windowed_spectrogram_dists(arr[0:n_use_traces], origin[0:n_use_traces])
+        dist = np.mean(dist_m)
+        
+        ax[0, i].set_title('Seismogram {}. $\mu$={}'.format(names[i] if names is not None else '', dist))
+        ax[0, i].set_aspect('auto')
+        spec = abs(np.fft.rfft(arr[frame], axis=1))**2
+        freqs = np.fft.rfftfreq(len(arr[frame][0]), d=rate)
+        if max_freq is None:
+            max_freq = np.inf
+
+        mask = freqs <= max_freq
+        ax[1, i].plot(freqs[mask], np.mean(spec, axis=0)[mask], lw=2)
+        ax[1, i].set_xlabel('Hz')
+        ax[1, i].set_title('Spectrum plot {}'.format(names[i] if names is not None else ''))
+        ax[1, i].set_aspect('auto')
+
+        
 def get_modifications_list(batch, i):
     """ get seismic batch components with short names """
     res = []
