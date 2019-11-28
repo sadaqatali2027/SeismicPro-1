@@ -43,7 +43,8 @@ def make_prediction():
     shift = args.shift
     predict(path_raw, model, num_zero, save_to, batch_size, trace_len, device, shift)
 
-def predict(path_raw, path_model, num_zero=100, save_to='dump.csv', batch_size=1000, trace_len=1000, device='cpu', shift=0):
+def predict(path_raw, path_model, num_zero=100, save_to='dump.csv',
+            batch_size=1000, trace_len=1000, device='cpu', shift=0):
     """Make predictions and dump results using loaded model and path to data.
 
     Parameters
@@ -63,7 +64,7 @@ def predict(path_raw, path_model, num_zero=100, save_to='dump.csv', batch_size=1
     device: str or torch.device, default: 'cpu'
         The device used for inference. Can be 'gpu' in case of avaliavle GPU.
     shift: int, default: 0
-        Alter the picking times for each trace on the given phase shift. Multiplied by `pi`.
+        Shift the picking times for each trace on the given phase shift. Multiplied by `pi`.
 
     """
     data = SeismicDataset(TraceIndex(name='raw', path=path_raw))

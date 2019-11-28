@@ -474,7 +474,10 @@ class SeismicBatch(Batch):
         if to_samples:
             data = self.meta[traces]['samples'][data]
 
-        if columns is None:
+        if columns is not None:
+            if PICKS_FILE_HEADERS[-1] not in columns:
+                raise ValueError('Columns must contain', PICKS_FILE_HEADERS[-1])
+        else:
             columns = PICKS_FILE_HEADERS
 
         df = self.index.get_df(reset=False)
@@ -483,9 +486,6 @@ class SeismicBatch(Batch):
             df = df.sort_values(by=sort_by)
 
         df = df.loc[self.indices]
-
-        if isinstance(self.index, KNNIndex):
-            df = df.iloc[::5, :]
 
         df[PICKS_FILE_HEADERS[-1]] = data.astype(int)
         df = df.reset_index(drop=self.index.name is None)[columns]
@@ -1262,7 +1262,7 @@ class SeismicBatch(Batch):
 
     @action
     @inbatch_parallel(init='_init_component', target="threads")
-    def shift_pick(self, index, src, dst=None, src_raw='raw', shift=1.5*np.pi, thd=0.05):
+    def shift_pick_phase(self, index, src, dst=None, src_raw='raw', shift=1.5*np.pi, threshold=0.05):
         """ Shifts picking time stored in `src` component on the given phase along the traces stored in `src_raw`.
 
         Parameters
@@ -1276,7 +1276,7 @@ class SeismicBatch(Batch):
         shift: float
             The amount of phase to shift, default is 1.5 * np.pi which corresponds to transfering picking times
             from 'max' to 'zero' type.
-        thd: float
+        threshold: float
             Threshold determining how many trace samples with low amplitudes, less then thd, can be skipped.
             Introduced because of the unstable behaviour of the hilbert transform at the begining of the signal.
 
@@ -1293,9 +1293,10 @@ class SeismicBatch(Batch):
         # finding x such that phase[x] = phase[pick] - shift
         phase_mod = phase - phase[pick] + shift
         phase_mod[phase_mod < 0] = 0
-        zero = len(phase_mod) - phase_mod[::-1].argmin() - 1 # in case phase_mod reaches 0 find the index of last one
-        # skip the trace samples with amplitudes < thd, starting from the `zero` sample
-        n_skip = max((np.abs(trace[zero:]) > thd).argmax() - 1, 0)
-        zero += n_skip
-        getattr(self, dst)[pos] = zero
+        # in case phase_mod reaches 0 multiple times find the index of last one
+        x = len(phase_mod) - phase_mod[::-1].argmin() - 1
+        # skip the trace samples with amplitudes < threshold, starting from the `zero` sample
+        n_skip = max((np.abs(trace[x:]) > threshold).argmax() - 1, 0)
+        x += n_skip
+        getattr(self, dst)[pos] = x
         return self
