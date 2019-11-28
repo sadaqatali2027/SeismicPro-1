@@ -18,7 +18,7 @@ from .file_utils import write_segy_file
 from .plot_utils import IndexTracker, spectrum_plot, seismic_plot, statistics_plot, gain_plot
 
 
-PICKS_FILE_HEADERS = ['FieldRecord', 'TraceNumber', 'FIRST_BREAK_TIME']
+PICKS_FILE_HEADER = 'FIRST_BREAK_TIME'
 
 
 ACTIONS_DICT = {
@@ -449,7 +449,7 @@ class SeismicBatch(Batch):
         return self
 
     @action
-    def _dump_picking(self, src, path, src_traces, to_miliseconds=True, columns=None):
+    def _dump_picking(self, src, path, src_traces, to_miliseconds=True, columns=('FieldRecord', 'TraceNumber')):
         """Dump picking to file.
 
         Parameters
@@ -462,8 +462,9 @@ class SeismicBatch(Batch):
             Batch component with corresponding traces.
         to_miliseconds : bool, default True
             Whether picks should be converted from trace samples to miliseconds.
-        columns: array_like, optional
-            Columns to include in the output file. See PICKS_FILE_HEADERS for default format.
+        columns: array_like
+            Columns to include in the output file.
+            In case `PICKS_FILE_HEADER` not included it will be added automatically.
 
         Returns
         -------
@@ -474,11 +475,8 @@ class SeismicBatch(Batch):
         if to_miliseconds:
             data = self.meta[src_traces]['samples'][data]
 
-        if columns is not None:
-            if PICKS_FILE_HEADERS[-1] not in columns:
-                raise ValueError('Columns must contain', PICKS_FILE_HEADERS[-1])
-        else:
-            columns = PICKS_FILE_HEADERS
+        if PICKS_FILE_HEADER not in columns:
+            columns = columns + (PICKS_FILE_HEADER, )
 
         df = self.index.get_df(reset=False)
         sort_by = self.meta[src]['sorting']
@@ -486,7 +484,7 @@ class SeismicBatch(Batch):
             df = df.sort_values(by=sort_by)
 
         df = df.loc[self.indices]
-        df[PICKS_FILE_HEADERS[-1]] = data.astype(int)
+        df[PICKS_FILE_HEADER] = data.astype(int)
         df = df.reset_index(drop=self.index.name is None)[columns]
         df.columns = df.columns.droplevel(1)
 
