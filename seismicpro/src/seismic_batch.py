@@ -481,7 +481,7 @@ class SeismicBatch(Batch):
             columns = PICKS_FILE_HEADERS
 
         df = self.index.get_df(reset=False)
-        sort_by = self.meta[src_traces]['sorting']
+        sort_by = self.meta[src]['sorting']
         if sort_by is not None:
             df = df.sort_values(by=sort_by)
 

@@ -92,7 +92,7 @@ def predict(path_raw, path_model, num_zero=100, save_to='dump.csv',
                  .mask_to_pick(src='predictions', dst='predictions', labels=False)
                 )
     if shift:
-        test_tmpl += Pipeline().shift_pick(src='predictions', dst='predictions', src_traces='raw', shift=np.pi*shift)
+        test_tmpl += Pipeline().shift_pick_phase(src='predictions', dst='predictions', src_traces='raw', shift=np.pi*shift)
 
     test_pipeline = test_tmpl + Pipeline().dump(src='predictions', fmt='picks', path=save_to, src_traces='raw')
     test_pipeline.run(batch_size, n_epochs=1, drop_last=False, shuffle=False, bar=True)
