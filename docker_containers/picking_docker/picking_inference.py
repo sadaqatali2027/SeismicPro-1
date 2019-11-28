@@ -82,7 +82,7 @@ def predict(path_raw, path_model, num_zero=100, save_to='dump.csv',
 
     test_tmpl = (data.p
                  .init_model('dynamic', UNet, 'my_model', config=config_predict)
-                 .load(components='raw', fmt='segy', tslice=np.arange(trace_len))
+                 .load(components='raw', fmt='segy', tslice=slice(0, trace_len))
                  .drop_zero_traces(num_zero=num_zero, src='raw')
                  .standardize(src='raw', dst='raw')
                  .add_components(components='predictions')
