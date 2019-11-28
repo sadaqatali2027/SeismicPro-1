@@ -449,7 +449,7 @@ class SeismicBatch(Batch):
         return self
 
     @action
-    def _dump_picking(self, src, path, traces='raw', to_samples=True, columns=None):
+    def _dump_picking(self, src, path, src_traces, to_miliseconds=True, columns=None):
         """Dump picking to file.
 
         Parameters
@@ -458,10 +458,10 @@ class SeismicBatch(Batch):
             Source to get picking from.
         path : str
             Output file path.
-        traces : str, default 'raw'
+        src_traces : str
             Batch component with corresponding traces.
-        to_samples : bool, default True
-            Should be picks converted to time samples.
+        to_miliseconds : bool, default True
+            Whether picks should be converted from trace samples to miliseconds.
         columns: array_like, optional
             Columns to include in the output file. See PICKS_FILE_HEADERS for default format.
 
@@ -471,8 +471,8 @@ class SeismicBatch(Batch):
             Batch unchanged.
         """
         data = getattr(self, src).astype(int)
-        if to_samples:
-            data = self.meta[traces]['samples'][data]
+        if to_miliseconds:
+            data = self.meta[src_traces]['samples'][data]
 
         if columns is not None:
             if PICKS_FILE_HEADERS[-1] not in columns:
@@ -481,12 +481,11 @@ class SeismicBatch(Batch):
             columns = PICKS_FILE_HEADERS
 
         df = self.index.get_df(reset=False)
-        sort_by = self.meta[traces]['sorting']
+        sort_by = self.meta[src_traces]['sorting']
         if sort_by is not None:
             df = df.sort_values(by=sort_by)
 
         df = df.loc[self.indices]
-
         df[PICKS_FILE_HEADERS[-1]] = data.astype(int)
         df = df.reset_index(drop=self.index.name is None)[columns]
         df.columns = df.columns.droplevel(1)
@@ -1067,7 +1066,7 @@ class SeismicBatch(Batch):
         return self
 
     @action
-    def picking_to_mask(self, src, dst, src_traces='raw'):
+    def picking_to_mask(self, src, dst, src_traces):
         """Convert picking time to the mask for TraceIndex.
 
         Parameters
@@ -1087,8 +1086,8 @@ class SeismicBatch(Batch):
         data = np.concatenate(getattr(self, src))
 
         samples = self.meta[src_traces]['samples']
-        tick = samples[1] - samples[0]
-        data = np.around(data / tick).astype('int')
+        rate = samples[1] - samples[0]
+        data = np.around(data / rate).astype('int')
 
         batch_size = data.shape[0]
         trace_length = getattr(self, src_traces)[0].shape[1]
@@ -1263,7 +1262,7 @@ class SeismicBatch(Batch):
 
     @action
     @inbatch_parallel(init='_init_component', target="threads")
-    def shift_pick_phase(self, index, src, dst=None, src_raw='raw', shift=1.5*np.pi, threshold=0.05):
+    def shift_pick_phase(self, index, src, src_traces, dst=None, shift=1.5*np.pi, threshold=0.05):
         """ Shifts picking time stored in `src` component on the given phase along the traces stored in `src_raw`.
 
         Parameters
@@ -1272,8 +1271,8 @@ class SeismicBatch(Batch):
             The batch components to get the data from.
         dst : str
             The batch components to put the result in.
-        src_raw: str
-            The batch components where the traces are stored, default 'raw'
+        src_traces: str
+            The batch components where the traces are stored.
         shift: float
             The amount of phase to shift, default is 1.5 * np.pi which corresponds to transfering picking times
             from 'max' to 'zero' type.
@@ -1284,7 +1283,7 @@ class SeismicBatch(Batch):
          """
         pos = self.get_pos(None, src, index)
         pick = getattr(self, src)[pos]
-        trace = getattr(self, src_raw)[pos]
+        trace = getattr(self, src_traces)[pos]
         if isinstance(self.index, KNNIndex):
             trace = trace[0]
         trace = np.squeeze(trace)
