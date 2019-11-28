@@ -19,9 +19,6 @@ jobs:
     - name: Update pylint
       run: pip3 install -U pylint
 
-    - name: Update tdigest - temp workaround
-      run: pip3 install -U tdigest
-
     - name: Check pylint
       run: pylint -rn --rcfile pylintrc seismicpro
 
