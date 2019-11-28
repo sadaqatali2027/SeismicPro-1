@@ -530,6 +530,7 @@ class SeismicBatch(Batch):
         res = np.split(idf.FIRST_BREAK_TIME.values,
                        np.cumsum(self.index.tracecounts))[:-1]
         self.add_components(components, init=res)
+        self.meta.update({components:dict(sorting=None)})
         return self
 
     @apply_to_each_component
