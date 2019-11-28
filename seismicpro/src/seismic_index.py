@@ -286,7 +286,7 @@ class KNNIndex(TraceIndex):
     n_neighbors : int
         Group size parameter.
     raise_error: bool
-        Wheather to raise error in case 2 recievers with the same coordinates found on the same shot, default False
+        Wheather to raise error in case 2 recievers with the same coordinates found on the same shot, default True
     kwargs : dict
         Named arguments for ```batchflow.FilesIndex````.
 
@@ -301,7 +301,7 @@ class KNNIndex(TraceIndex):
         traces. Columns include FieldRecord, TraceNumber, TRACE_SEQUENCE_FILE, file_id and
         a number of extra_headers if specified.
     """
-    def __init__(self, *args, raise_error=False, **kwargs):
+    def __init__(self, *args, raise_error=True, **kwargs):
         self.raise_error = raise_error
         kwargs['index_name'] = 'KNN'
         super().__init__(*args, **kwargs)
