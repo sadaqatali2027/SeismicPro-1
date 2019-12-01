@@ -644,10 +644,9 @@ class SeismicBatch(Batch):
         getattr(self, dst)[pos] = np.pad(data, **kwargs)
         return self
 
-    @action
     @inbatch_parallel(init="_init_component", target="threads")
     @apply_to_each_component
-    def sort_traces(self, index, *args, src, sort_by, dst=None):
+    def _sort(self, index, src, sort_by, sorting, dst=None):
         """Sort traces.
 
         Parameters
@@ -656,7 +655,40 @@ class SeismicBatch(Batch):
             The batch components to get the data from.
         dst : str, array-like
             The batch components to put the result in.
-        sort_by: str
+        sort_by : str
+            Sorting key.
+        sorting : str
+            Current sorting of `src` component
+
+        Returns
+        -------
+        batch : SeismicBatch
+            Batch with new trace sorting.
+        """
+        pos = self.get_pos(None, src, index)
+        df = self.index.get_df([index])
+
+        if sorting:
+            cols = [sorting, sort_by]
+            sorted_index_df = df[cols].sort_values(sorting)
+            order = np.argsort(sorted_index_df[sort_by].values)
+        else:
+            order = np.argsort(df[sort_by].values)
+
+        getattr(self, dst)[pos] = getattr(self, src)[pos][order]
+        return self
+
+    @action
+    def sort_traces(self, *args, src, sort_by, dst=None):
+        """Sort traces.
+
+        Parameters
+        ----------
+        src : str, array-like
+            The batch components to get the data from.
+        dst : str, array-like
+            The batch components to put the result in.
+        sort_by : str
             Sorting key.
 
         Returns
@@ -670,29 +702,17 @@ class SeismicBatch(Batch):
         else:
             sorting = None
 
-        pos = self.get_pos(None, src, index)
-        df = self.index.get_df([index])
+        if sorting == sort_by:
+            return self
 
-        if sorting:
-            if sorting == sort_by:
-                return self
-
-            cols = [sorting, sort_by]
-            sorted_index_df = df[cols].sort_values(sorting)
-            order = np.argsort(sorted_index_df[sort_by].values)
-        else:
-            order = np.argsort(df[sort_by].values)
-
-        getattr(self, dst)[pos] = getattr(self, src)[pos][order]
-
-        if pos == 0:
-            self.meta[dst]['sorting'] = sort_by
+        self._sort(src=src, sort_by=sort_by, sorting=sorting, dst=dst)
+        self.meta[dst]['sorting'] = sort_by
 
         return self
 
     @action
     @inbatch_parallel(init="indices", post='_post_filter_by_mask', target="threads")
-    def drop_zero_traces(self, index, src, num_zero, **kwargs):
+    def drop_zero_traces(self, index, src, num_zero, all_comps_sorted=True, **kwargs):
         """Drop traces with sequence of zeros longer than ```num_zero```.
 
         This action drops traces from index dataframe and from all batch components
@@ -704,6 +724,9 @@ class SeismicBatch(Batch):
             Size of the sequence of zeros.
         src : str, array-like
             The batch components to get the data from.
+        all_comps_sorted : bool
+            Check that all components have the same sorting to ensure that they are
+            modified in a same way.
 
         Returns
         -------
@@ -712,8 +735,9 @@ class SeismicBatch(Batch):
 
         Raises
         ------
-        ValueError : if `src` has no sorting and batch index is FieldIndex
-        ValueError : if any component in batch has sorting different from `src`
+        ValueError : if `src` has no sorting and batch index is FieldIndex.
+        ValueError : if `all_comps_sorted` is True and any component in batch has
+                     sorting different from `src`.
 
         Note
         ----
@@ -726,9 +750,10 @@ class SeismicBatch(Batch):
             raise ValueError('traces in `{}` component should be sorted '
                              'before dropping zero traces'.format(src))
 
-        has_same_sorting = all([self.meta[comp]['sorting'] == sorting for comp in self.components])
-        if not has_same_sorting:
-            raise ValueError('all components in batch should have same sorting')
+        if all_comps_sorted:
+            has_same_sorting = all([self.meta[comp]['sorting'] == sorting for comp in self.components])
+            if not has_same_sorting:
+                raise ValueError('all components in batch should have same sorting')
 
         pos = self.get_pos(None, src, index)
         traces = getattr(self, src)[pos]
