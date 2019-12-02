@@ -522,11 +522,11 @@ class SeismicBatch(Batch):
         return super().load(src=src, fmt=fmt, components=components, **kwargs)
 
     def _load_picking(self, components):
-        """Load picking from file."""
+        """Load picking from dataframe column."""
         idf = self.index.get_df(reset=False)
-        res = np.split(idf.FIRST_BREAK_TIME.values,
-                       np.cumsum(self.index.tracecounts))[:-1]
-        self.add_components(components, init=res)
+        ind = np.cumsum(self.index.tracecounts)[:-1]
+        dst_data = np.split(idf[PICKS_FILE_HEADER].values, ind)
+        self.add_components(components, init=np.array(dst_data + [None])[:-1])
         self.meta.update({components:dict(sorting=None)})
         return self
 
