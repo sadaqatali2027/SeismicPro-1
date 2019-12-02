@@ -171,7 +171,8 @@ class SeismicBatch(Batch):
         return self.indices
 
     def _post_filter_by_mask(self, mask, *args, **kwargs):
-        """Component filtration using the union of all the received masks.
+        """Index filtration using all received masks. This post function assumes that
+        components have already been sorted.
 
         Parameters
         ----------
@@ -181,7 +182,7 @@ class SeismicBatch(Batch):
         Returns
         -------
             : SeismicBatch
-            New batch with filtered components and new index.
+            New batch with new index.
 
         Note
         ----
@@ -202,19 +203,19 @@ class SeismicBatch(Batch):
         batch_index = type(self.index).from_index(index=new_index, idf=new_idf,
                                                   index_name=self.index.name)
 
-        batch = type(self)(batch_index)
-        batch.add_components(self.components)
-        batch.meta = self.meta
+        new_batch = type(self)(batch_index)
+        new_batch.add_components(self.components)
+        new_batch.meta = self.meta
 
-        for comp in batch.components:
-            setattr(batch, comp, np.array([None] * len(batch.index)))
+        for comp in new_batch.components:
+            setattr(new_batch, comp, np.array([None] * len(new_batch.index)))
 
         for index in new_index:
-            for isrc in batch.components:
-                pos_batch = batch.get_pos(None, isrc, index)
-                pos_self = self.get_pos(None, isrc, index)
-                getattr(batch, isrc)[pos_batch] = getattr(self, isrc)[pos_self]
-        return batch
+            for isrc in new_batch.components:
+                pos_new = new_batch.get_pos(None, isrc, index)
+                pos_old = self.get_pos(None, isrc, index)
+                getattr(new_batch, isrc)[pos_new] = getattr(self, isrc)[pos_old]
+        return new_batch
 
     def trace_headers(self, header, flatten=False):
         """Get trace heades.
@@ -646,7 +647,7 @@ class SeismicBatch(Batch):
 
     @inbatch_parallel(init="_init_component", target="threads")
     @apply_to_each_component
-    def _sort(self, index, src, sort_by, sorting, dst=None):
+    def _sort(self, index, src, sort_by, current_sorting, dst=None):
         """Sort traces.
 
         Parameters
@@ -657,7 +658,7 @@ class SeismicBatch(Batch):
             The batch components to put the result in.
         sort_by : str
             Sorting key.
-        sorting : str
+        current_sorting : str
             Current sorting of `src` component
 
         Returns
@@ -668,9 +669,9 @@ class SeismicBatch(Batch):
         pos = self.get_pos(None, src, index)
         df = self.index.get_df([index])
 
-        if sorting:
-            cols = [sorting, sort_by]
-            sorted_index_df = df[cols].sort_values(sorting)
+        if current_sorting:
+            cols = [current_sorting, sort_by]
+            sorted_index_df = df[cols].sort_values(current_sorting)
             order = np.argsort(sorted_index_df[sort_by].values)
         else:
             order = np.argsort(df[sort_by].values)
@@ -679,7 +680,7 @@ class SeismicBatch(Batch):
         return self
 
     @action
-    def sort_traces(self, *args, src, sort_by, dst=None):
+    def sort_traces(self, *args, src, sort_by, dst):
         """Sort traces.
 
         Parameters
@@ -698,14 +699,14 @@ class SeismicBatch(Batch):
         """
         _ = args
         if src in self.meta.keys():
-            sorting = self.meta[src].get('sorting')
+            current_sorting = self.meta[src].get('sorting')
         else:
-            sorting = None
+            current_sorting = None
 
-        if sorting == sort_by:
+        if current_sorting == sort_by:
             return self
 
-        self._sort(src=src, sort_by=sort_by, sorting=sorting, dst=dst)
+        self._sort(src=src, sort_by=sort_by, current_sorting=current_sorting, dst=dst)
         self.meta[dst]['sorting'] = sort_by
 
         return self
@@ -721,7 +722,7 @@ class SeismicBatch(Batch):
         Parameters
         ----------
         num_zero : int
-            Size of the sequence of zeros.
+            All traces that contain more than `num_zero` consecutive zeros will be removed.
         src : str, array-like
             The batch components to get the data from.
         all_comps_sorted : bool
@@ -751,7 +752,7 @@ class SeismicBatch(Batch):
                              'before dropping zero traces'.format(src))
 
         if all_comps_sorted:
-            has_same_sorting = all([self.meta[comp]['sorting'] == sorting for comp in self.components])
+            has_same_sorting = all(self.meta[comp]['sorting'] == sorting for comp in self.components)
             if not has_same_sorting:
                 raise ValueError('all components in batch should have same sorting')
 
@@ -759,7 +760,7 @@ class SeismicBatch(Batch):
         traces = getattr(self, src)[pos]
         mask = list()
         for trace in traces:
-            nonzero_indices = np.nonzero(trace)[0]
+            nonzero_indices = np.flatnonzero(trace)
             # add -1 and len(trace) indices to count leading and trailing zero sequences
             nonzero_indices = np.concatenate(([-1], nonzero_indices, [len(trace)]))
             zero_seqs = np.diff(nonzero_indices) - 1
