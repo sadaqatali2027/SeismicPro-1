@@ -172,7 +172,7 @@ class SeismicBatch(Batch):
 
     def _post_filter_by_mask(self, mask, *args, **kwargs):
         """Index filtration using all received masks. This post function assumes that
-        components have already been sorted.
+        components have already been filtered.
 
         Parameters
         ----------
@@ -188,7 +188,8 @@ class SeismicBatch(Batch):
         ----
         Batch items in each component should be filtered in decorated action.
         This post function creates new instance of SeismicBatch with new index
-        instance.
+        instance and copies filtered components from original batch for elements
+        in new index.
         """
         _ = args, kwargs
         if any_action_failed(mask):
