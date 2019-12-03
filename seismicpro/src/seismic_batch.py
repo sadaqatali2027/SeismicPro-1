@@ -10,13 +10,14 @@ import segyio
 
 from ..batchflow import action, inbatch_parallel, Batch, any_action_failed
 
-from .seismic_index import SegyFilesIndex, FieldIndex, KNNIndex
+from .seismic_index import SegyFilesIndex, FieldIndex, KNNIndex, TraceIndex
 
 from .utils import (FILE_DEPENDEND_COLUMNS, partialmethod, calculate_sdc_for_field, massive_block,
                     check_unique_fieldrecord_across_surveys)
 from .file_utils import write_segy_file
 from .plot_utils import IndexTracker, spectrum_plot, seismic_plot, statistics_plot, gain_plot
 
+INDEX_UID = 'TRACE_SEQUENCE_FILE'
 
 PICKS_FILE_HEADER = 'FIRST_BREAK_TIME'
 
@@ -171,53 +172,48 @@ class SeismicBatch(Batch):
         return self.indices
 
     def _post_filter_by_mask(self, mask, *args, **kwargs):
-        """Component filtration using the union of all the received masks.
+        """Index filtration using all received masks. This post function assumes that
+        components have already been filtered.
 
         Parameters
         ----------
         mask : list
-            List of masks if ``src`` is ``str``
-            or list of lists if ``src`` is list.
+            list of boolean arrays
 
         Returns
         -------
             : SeismicBatch
-            New batch class of filtered components.
+            New batch with new index.
 
         Note
         ----
-        All components will be changed with given mask and during the proccess,
-        new SeismicBatch instance will be created.
+        Batch items in each component should be filtered in decorated action.
+        This post function creates new instance of SeismicBatch with new index
+        instance and copies filtered components from original batch for elements
+        in new index.
         """
+        _ = args, kwargs
         if any_action_failed(mask):
             all_errors = [error for error in mask if isinstance(error, Exception)]
             print(all_errors)
             raise ValueError(all_errors)
 
-        _ = args
-        src = kwargs.get('src', None)
-        src = (src, ) if isinstance(src, str) else src
-
-        mask = np.concatenate((np.array(mask)))
-        new_idf = self.index.get_df(index=np.hstack((mask)), reset=False)
+        mask = np.concatenate(mask)
+        new_idf = self.index.get_df(index=mask, reset=False)
         new_index = new_idf.index.unique()
 
         batch_index = type(self.index).from_index(index=new_index, idf=new_idf,
                                                   index_name=self.index.name)
 
-        batch = type(self)(batch_index)
-        batch.add_components(self.components)
-        batch.meta = self.meta
+        new_batch = type(self)(batch_index)
+        new_batch.add_components(self.components, len(self.components) * [new_batch.array_of_nones])
+        new_batch.meta = self.meta
 
-        for comp in batch.components:
-            setattr(batch, comp, np.array([None] * len(batch.index)))
-
-        for i, index in enumerate(new_index):
-            for isrc in batch.components:
-                pos = self.get_pos(None, isrc, index)
-                new_data = getattr(self, isrc)[pos][mask[pos]]
-                getattr(batch, isrc)[i] = new_data
-        return batch
+        for isrc in new_batch.components:
+            pos_new = new_batch.get_pos(None, isrc, new_batch.indices)
+            pos_old = self.get_pos(None, isrc, new_batch.indices)
+            getattr(new_batch, isrc)[pos_new] = getattr(self, isrc)[pos_old]
+        return new_batch
 
     def trace_headers(self, header, flatten=False):
         """Get trace heades.
@@ -574,7 +570,7 @@ class SeismicBatch(Batch):
         _ = src, args
         pos = self.get_pos(None, "indices", index)
         path = index
-        trace_seq = self.index.get_df([index])[('TRACE_SEQUENCE_FILE', src)]
+        trace_seq = self.index.get_df([index])[(INDEX_UID, src)]
         if tslice is None:
             tslice = slice(None)
 
@@ -653,10 +649,9 @@ class SeismicBatch(Batch):
         getattr(self, dst)[pos] = np.pad(data, **kwargs)
         return self
 
-    @action
     @inbatch_parallel(init="_init_component", target="threads")
     @apply_to_each_component
-    def sort_traces(self, index, *args, src, sort_by, dst=None):
+    def _sort(self, index, src, sort_by, current_sorting, dst=None):
         """Sort traces.
 
         Parameters
@@ -665,7 +660,40 @@ class SeismicBatch(Batch):
             The batch components to get the data from.
         dst : str, array-like
             The batch components to put the result in.
-        sort_by: str
+        sort_by : str
+            Sorting key.
+        current_sorting : str
+            Current sorting of `src` component
+
+        Returns
+        -------
+        batch : SeismicBatch
+            Batch with new trace sorting.
+        """
+        pos = self.get_pos(None, src, index)
+        df = self.index.get_df([index])
+
+        if current_sorting:
+            cols = [current_sorting, sort_by]
+            sorted_index_df = df[cols].sort_values(current_sorting)
+            order = np.argsort(sorted_index_df[sort_by].values)
+        else:
+            order = np.argsort(df[sort_by].values)
+
+        getattr(self, dst)[pos] = getattr(self, src)[pos][order]
+        return self
+
+    @action
+    def sort_traces(self, *args, src, sort_by, dst):
+        """Sort traces.
+
+        Parameters
+        ----------
+        src : str, array-like
+            The batch components to get the data from.
+        dst : str, array-like
+            The batch components to put the result in.
+        sort_by : str
             Sorting key.
 
         Returns
@@ -674,40 +702,89 @@ class SeismicBatch(Batch):
             Batch with new trace sorting.
         """
         _ = args
-        pos = self.get_pos(None, src, index)
-        df = self.index.get_df([index])
-        order = np.argsort(df[sort_by].tolist())
-        getattr(self, dst)[pos] = getattr(self, src)[pos][order]
-        if pos == 0:
-            self.meta[dst]['sorting'] = sort_by
+        if src in self.meta.keys():
+            current_sorting = self.meta[src].get('sorting')
+        else:
+            current_sorting = None
+
+        if current_sorting == sort_by:
+            return self
+
+        self._sort(src=src, sort_by=sort_by, current_sorting=current_sorting, dst=dst)
+        self.meta[dst]['sorting'] = sort_by
 
         return self
 
     @action
     @inbatch_parallel(init="indices", post='_post_filter_by_mask', target="threads")
-    @apply_to_each_component
-    def drop_zero_traces(self, index, src, num_zero, **kwargs):
+    def drop_zero_traces(self, index, src, num_zero, all_comps_sorted=True, **kwargs):
         """Drop traces with sequence of zeros longer than ```num_zero```.
+
+        This action drops traces from index dataframe and from all batch components
+        according to the mask calculated on `src` component.
 
         Parameters
         ----------
         num_zero : int
-            Size of the sequence of zeros.
+            All traces that contain more than `num_zero` consecutive zeros will be removed.
         src : str, array-like
             The batch components to get the data from.
+        all_comps_sorted : bool
+            Check that all components have the same sorting to ensure that they are
+            modified in a same way.
 
         Returns
         -------
             : SeismicBatch
             Batch without dropped traces.
+
+        Raises
+        ------
+        ValueError : if `src` has no sorting and batch index is FieldIndex.
+        ValueError : if `all_comps_sorted` is True and any component in batch has
+                     sorting different from `src`.
+
+        Note
+        ----
+        This action creates new instance of SeismicBatch with new index
+        instance.
         """
         _ = kwargs
+        sorting = self.meta[src]['sorting']
+        if sorting is None and not isinstance(self.index, TraceIndex):
+            raise ValueError('traces in `{}` component should be sorted '
+                             'before dropping zero traces'.format(src))
+
+        if all_comps_sorted:
+            has_same_sorting = all(self.meta[comp]['sorting'] == sorting for comp in self.components)
+            if not has_same_sorting:
+                raise ValueError('all components in batch should have same sorting')
+
         pos = self.get_pos(None, src, index)
         traces = getattr(self, src)[pos]
         mask = list()
-        for _, trace in enumerate(traces != 0):
-            diff_zeros = np.diff(np.append(np.where(trace)[0], len(trace)))
-            mask.append(False if len(diff_zeros) == 0 else np.max(diff_zeros) < num_zero)
+        for trace in traces:
+            nonzero_indices = np.flatnonzero(trace)
+            # add -1 and len(trace) indices to count leading and trailing zero sequences
+            nonzero_indices = np.concatenate(([-1], nonzero_indices, [len(trace)]))
+            zero_seqs = np.diff(nonzero_indices) - 1
+            mask.append(np.max(zero_seqs) < num_zero)
+        mask = np.array(mask)
+
+        for comp in self.components:
+            getattr(self, comp)[pos] = getattr(self, comp)[pos][mask]
+
+        if sorting:
+            cols = [(INDEX_UID, src), (sorting, '')]
+            index_df = self.index.get_df([index])
+            if cols[0] not in index_df.columns:
+                # Level 1 of MultiIndex contains name of common columns ('') at first position and names of
+                # all columns that relate to specific sgy files.
+                raise ValueError('`src` should be one of the component names that Index was created with: {}'
+                                 ''.format(index_df.columns.levels[1][1:].values))
+            sorted_index_df = index_df[cols].sort_values(sorting)
+            order = np.argsort(sorted_index_df[cols[0]].values)
+            return mask[order]
         return mask
 
     @action
