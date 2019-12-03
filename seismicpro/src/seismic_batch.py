@@ -4,12 +4,13 @@ from textwrap import dedent
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import signal
+from scipy.signal import hilbert
 import pywt
 import segyio
 
 from ..batchflow import action, inbatch_parallel, Batch, any_action_failed
 
-from .seismic_index import SegyFilesIndex, FieldIndex, TraceIndex
+from .seismic_index import SegyFilesIndex, FieldIndex, KNNIndex, TraceIndex
 
 from .utils import (FILE_DEPENDEND_COLUMNS, partialmethod, calculate_sdc_for_field, massive_block,
                     check_unique_fieldrecord_across_surveys)
@@ -18,7 +19,7 @@ from .plot_utils import IndexTracker, spectrum_plot, seismic_plot, statistics_pl
 
 INDEX_UID = 'TRACE_SEQUENCE_FILE'
 
-PICKS_FILE_HEADERS = ['FieldRecord', 'TraceNumber', 'timeOffset']
+PICKS_FILE_HEADER = 'FIRST_BREAK_TIME'
 
 
 ACTIONS_DICT = {
@@ -444,7 +445,7 @@ class SeismicBatch(Batch):
         return self
 
     @action
-    def _dump_picking(self, src, path, traces, to_samples, columns=None):
+    def _dump_picking(self, src, path, src_traces, input_units='samples', columns=('FieldRecord', 'TraceNumber')):
         """Dump picking to file.
 
         Parameters
@@ -453,38 +454,41 @@ class SeismicBatch(Batch):
             Source to get picking from.
         path : str
             Output file path.
-        traces : str
+        src_traces : str
             Batch component with corresponding traces.
-        to_samples : bool
-            Should be picks converted to time samples.
-        columns: array_like, optional
-            Columns to include in the output file. See PICKS_FILE_HEADERS for default format.
+        input_units : str
+            Units in which picking is stored in src. Must be one of the 'samples' or 'milliseconds'.
+            In case 'milliseconds' dumped as is. Otherwise converted to milliseconds first.
+        columns: array_like
+            Columns to include in the output file.
+            In case `PICKS_FILE_HEADER` not included it will be added automatically.
 
         Returns
         -------
         batch : SeismicBatch
             Batch unchanged.
         """
-        data = getattr(self, src).astype(int)
-        if to_samples:
-            data = self.meta[traces]['samples'][data]
+        data = getattr(self, src)
+        if input_units == 'samples':
+            data = data.astype(int)
+            data = self.meta[src_traces]['samples'][data]
 
-        if columns is None:
-            columns = PICKS_FILE_HEADERS
+        if PICKS_FILE_HEADER not in columns:
+            columns = columns + (PICKS_FILE_HEADER, )
 
         df = self.index.get_df(reset=False)
-        sort_by = self.meta[traces]['sorting']
+        sort_by = self.meta.get(src, {}).get('sorting')
         if sort_by is not None:
             df = df.sort_values(by=sort_by)
 
         df = df.loc[self.indices]
-        df['timeOffset'] = data.astype(int)
-        df = df.reset_index(drop=self.index.name is None)[columns]
+        df = df.reset_index(drop=self.index.name is None)[list(columns)]
         df.columns = df.columns.droplevel(1)
 
-        for i in [0, 2, 4]:
-            df.insert(i, str(i), "")
-        df.to_csv(path, index=False, sep='\t', header=False, encoding='ascii', mode='a')
+        if not os.path.isfile(path):
+            df.to_csv(path, index=False, header=True, mode='a')
+        else:
+            df.to_csv(path, index=False, header=None, mode='a')
         return self
 
     @action
@@ -515,11 +519,12 @@ class SeismicBatch(Batch):
         return super().load(src=src, fmt=fmt, components=components, **kwargs)
 
     def _load_picking(self, components):
-        """Load picking from file."""
+        """Load picking from dataframe column."""
         idf = self.index.get_df(reset=False)
-        res = np.split(idf.FIRST_BREAK_TIME.values,
-                       np.cumsum(self.index.tracecounts))[:-1]
-        self.add_components(components, init=res)
+        ind = np.cumsum(self.index.tracecounts)[:-1]
+        dst_data = np.split(idf[PICKS_FILE_HEADER].values, ind)
+        self.add_components(components, init=np.array(dst_data + [None])[:-1])
+        self.meta.update({components:dict(sorting=None)})
         return self
 
     @apply_to_each_component
@@ -1137,7 +1142,7 @@ class SeismicBatch(Batch):
         return self
 
     @action
-    def picking_to_mask(self, src, dst, src_traces='raw'):
+    def picking_to_mask(self, src, dst, src_traces):
         """Convert picking time to the mask for TraceIndex.
 
         Parameters
@@ -1157,8 +1162,8 @@ class SeismicBatch(Batch):
         data = np.concatenate(getattr(self, src))
 
         samples = self.meta[src_traces]['samples']
-        tick = samples[1] - samples[0]
-        data = np.around(data / tick).astype('int')
+        rate = samples[1] - samples[0]
+        data = np.around(data / rate).astype('int')
 
         batch_size = data.shape[0]
         trace_length = getattr(self, src_traces)[0].shape[1]
@@ -1329,4 +1334,46 @@ class SeismicBatch(Batch):
         equalized_field = field / p_95
 
         getattr(self, dst)[pos] = equalized_field
+        return self
+
+    @action
+    @inbatch_parallel(init='_init_component', target="threads")
+    def shift_pick_phase(self, index, src, src_traces, dst=None, shift=1.5, threshold=0.05):
+        """ Shifts picking time stored in `src` component on the given phase along the traces stored in `src_traces`.
+
+        Parameters
+        ----------
+        src : str
+            The batch component to get picking from.
+        dst : str
+            The batch component to put the result in.
+        src_traces: str
+            The batch component where the traces are stored.
+        shift: float
+            The amount of phase to shift measured in radians. Default is 1.5 , which corresponds
+            to transfering the picking times from 'max' to 'zero' type.
+        threshold: float
+            Threshold determining amplitude, such that all the samples with amplitude less then threshold would be
+            skipped. Introduced because of unstable behaviour of the hilbert transform at the begining of the signal.
+
+         """
+        shift *= np.pi
+        pos = self.get_pos(None, src, index)
+        pick = getattr(self, src)[pos]
+        trace = getattr(self, src_traces)[pos]
+        if isinstance(self.index, KNNIndex):
+            trace = trace[0]
+        trace = np.squeeze(trace)
+
+        analytic = hilbert(trace)
+        phase = np.unwrap(np.angle(analytic))
+        # finding x such that phase[x] = phase[pick] - shift
+        phase_mod = phase - (phase[pick] - shift)
+        phase_mod[phase_mod < 0] = 0
+        # in case phase_mod reaches 0 multiple times find the index of last one
+        x = len(phase_mod) - phase_mod[::-1].argmin() - 1
+        # skip the trace samples with amplitudes < threshold, starting from the `zero` sample
+        n_skip = max((np.abs(trace[x:]) > threshold).argmax() - 1, 0)
+        x += n_skip
+        getattr(self, dst)[pos] = x
         return self
