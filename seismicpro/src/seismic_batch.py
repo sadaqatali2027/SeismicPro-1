@@ -9,7 +9,7 @@ import segyio
 
 from ..batchflow import action, inbatch_parallel, Batch, any_action_failed
 
-from .seismic_index import SegyFilesIndex, FieldIndex
+from .seismic_index import SegyFilesIndex, FieldIndex, TraceIndex
 
 from .utils import (FILE_DEPENDEND_COLUMNS, partialmethod, calculate_sdc_for_field, massive_block,
                     check_unique_fieldrecord_across_surveys)
@@ -205,17 +205,16 @@ class SeismicBatch(Batch):
                                                   index_name=self.index.name)
 
         new_batch = type(self)(batch_index)
-        new_batch.add_components(self.components)
+        new_batch.add_components(self.components, len(self.components) * [new_batch.array_of_nones])
         new_batch.meta = self.meta
 
-        for comp in new_batch.components:
-            setattr(new_batch, comp, np.array([None] * len(new_batch.index)))
-
-        for index in new_index:
-            for isrc in new_batch.components:
-                pos_new = new_batch.get_pos(None, isrc, index)
-                pos_old = self.get_pos(None, isrc, index)
-                getattr(new_batch, isrc)[pos_new] = getattr(self, isrc)[pos_old]
+        for isrc in new_batch.components:
+            pos_new = []
+            pos_old = []
+            for index in new_index:
+                pos_new.append(new_batch.get_pos(None, isrc, index))
+                pos_old.append(self.get_pos(None, isrc, index))
+            getattr(new_batch, isrc)[pos_new] = getattr(self, isrc)[pos_old]
         return new_batch
 
     def trace_headers(self, header, flatten=False):
