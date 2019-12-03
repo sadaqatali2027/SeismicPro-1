@@ -449,7 +449,7 @@ class SeismicBatch(Batch):
         return self
 
     @action
-    def _dump_picking(self, src, path, src_traces, to_miliseconds=True, columns=('FieldRecord', 'TraceNumber')):
+    def _dump_picking(self, src, path, src_traces, input_units='samples', columns=('FieldRecord', 'TraceNumber')):
         """Dump picking to file.
 
         Parameters
@@ -460,8 +460,8 @@ class SeismicBatch(Batch):
             Output file path.
         src_traces : str
             Batch component with corresponding traces.
-        to_miliseconds : bool, default True
-            Whether picks should be converted from trace samples to miliseconds.
+        input_units : str
+            Defines in which units picking is stored in src. Must be one of the 'samples' or 'milliseconds'.
         columns: array_like
             Columns to include in the output file.
             In case `PICKS_FILE_HEADER` not included it will be added automatically.
@@ -471,20 +471,20 @@ class SeismicBatch(Batch):
         batch : SeismicBatch
             Batch unchanged.
         """
-        data = getattr(self, src).astype(int)
-        if to_miliseconds:
+        data = getattr(self, src)
+        if input_units == 'samples':
+            data = data.astype(int)
             data = self.meta[src_traces]['samples'][data]
 
         if PICKS_FILE_HEADER not in columns:
             columns = columns + (PICKS_FILE_HEADER, )
 
         df = self.index.get_df(reset=False)
-        sort_by = self.meta[src]['sorting']
+        sort_by = self.meta.get(src, {}).get('sorting')
         if sort_by is not None:
             df = df.sort_values(by=sort_by)
 
         df = df.loc[self.indices]
-        df[PICKS_FILE_HEADER] = data.astype(int)
         df = df.reset_index(drop=self.index.name is None)[columns]
         df.columns = df.columns.droplevel(1)
 
