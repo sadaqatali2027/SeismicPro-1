@@ -209,11 +209,8 @@ class SeismicBatch(Batch):
         new_batch.meta = self.meta
 
         for isrc in new_batch.components:
-            pos_new = []
-            pos_old = []
-            for index in new_index:
-                pos_new.append(new_batch.get_pos(None, isrc, index))
-                pos_old.append(self.get_pos(None, isrc, index))
+            pos_new = new_batch.get_pos(None, isrc, new_batch.indices)
+            pos_old = self.get_pos(None, isrc, new_batch.indices)
             getattr(new_batch, isrc)[pos_new] = getattr(self, isrc)[pos_old]
         return new_batch
 
@@ -772,7 +769,13 @@ class SeismicBatch(Batch):
 
         if sorting:
             cols = [(INDEX_UID, src), (sorting, '')]
-            sorted_index_df = self.index.get_df([index])[cols].sort_values(sorting)
+            index_df = self.index.get_df([index])
+            if cols[0] not in index_df.columns:
+                # Level 1 of MultiIndex contains name of common columns ('') at first position and names of
+                # all columns that relate to specific sgy files.
+                raise ValueError('`src` should be one of the component names that Index was created with: {}'
+                                 ''.format(index_df.columns.levels[1][1:].values))
+            sorted_index_df = index_df[cols].sort_values(sorting)
             order = np.argsort(sorted_index_df[cols[0]].values)
             return mask[order]
         return mask
