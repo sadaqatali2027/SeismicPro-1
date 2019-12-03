@@ -812,7 +812,7 @@ def transform_to_fixed_width_columns(path, path_save=None, n_spaces=8, max_len=(
     """ Transforms the format of the csv file with dumped picking so all the columns are separated
     by `n_spaces` spaces exactly. To make such transform possible you must provide the maximum number
     of digits each column, except the last one, contains. In case, for example, traces are identified
-    by the 'FieldRecord' and 'TraceNumber' headers, and they varies from 1 to 123456 and from 1 to 1234 respectively,
+    by the 'FieldRecord' and 'TraceNumber' headers, and their maximum values are 999999 and 9999 respectively,
     `max_len` is `(6, 4)`. Such transform makes it compatible with specific seismic processing software.
 
 
@@ -825,7 +825,7 @@ def transform_to_fixed_width_columns(path, path_save=None, n_spaces=8, max_len=(
     n_spaces : int, default is 8
         The number of spaces separating columns.
     max_len : tuple, default is (6, 4)
-        The maximum number of digits each column, except the last one, contains.
+        Width of each column except last one.
     """
     if path_save is not None:
         write_object = open(path_save, 'w')

@@ -1260,25 +1260,26 @@ class SeismicBatch(Batch):
 
     @action
     @inbatch_parallel(init='_init_component', target="threads")
-    def shift_pick_phase(self, index, src, src_traces, dst=None, shift=1.5*np.pi, threshold=0.05):
-        """ Shifts picking time stored in `src` component on the given phase along the traces stored in `src_raw`.
+    def shift_pick_phase(self, index, src, src_traces, dst=None, shift=1.5, threshold=0.05):
+        """ Shifts picking time stored in `src` component on the given phase along the traces stored in `src_traces`.
 
         Parameters
         ----------
         src : str
-            The batch components to get the data from.
+            The batch component to get picking from.
         dst : str
-            The batch components to put the result in.
+            The batch component to put the result in.
         src_traces: str
-            The batch components where the traces are stored.
+            The batch component where the traces are stored.
         shift: float
-            The amount of phase to shift, default is 1.5 * np.pi which corresponds to transfering picking times
-            from 'max' to 'zero' type.
+            The amount of phase to shift measured in radians. Default is 1.5 , which corresponds
+            to transfering the picking times from 'max' to 'zero' type.
         threshold: float
-            Threshold determining how many trace samples with low amplitudes, less then thd, can be skipped.
-            Introduced because of the unstable behaviour of the hilbert transform at the begining of the signal.
+            Threshold determining amplitude, such that all the samples with amplitude less then threshold would be
+            skipped. Introduced because of unstable behaviour of the hilbert transform at the begining of the signal.
 
          """
+        shift *= np.pi
         pos = self.get_pos(None, src, index)
         pick = getattr(self, src)[pos]
         trace = getattr(self, src_traces)[pos]
@@ -1289,7 +1290,7 @@ class SeismicBatch(Batch):
         analytic = hilbert(trace)
         phase = np.unwrap(np.angle(analytic))
         # finding x such that phase[x] = phase[pick] - shift
-        phase_mod = phase - phase[pick] + shift
+        phase_mod = phase - (phase[pick] - shift)
         phase_mod[phase_mod < 0] = 0
         # in case phase_mod reaches 0 multiple times find the index of last one
         x = len(phase_mod) - phase_mod[::-1].argmin() - 1
