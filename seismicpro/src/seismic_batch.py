@@ -461,7 +461,8 @@ class SeismicBatch(Batch):
         src_traces : str
             Batch component with corresponding traces.
         input_units : str
-            Defines in which units picking is stored in src. Must be one of the 'samples' or 'milliseconds'.
+            Units in which picking is stored in src. Must be one of the 'samples' or 'milliseconds'.
+            In case 'milliseconds' dumped as is. Otherwise converted to milliseconds first.
         columns: array_like
             Columns to include in the output file.
             In case `PICKS_FILE_HEADER` not included it will be added automatically.
@@ -485,7 +486,7 @@ class SeismicBatch(Batch):
             df = df.sort_values(by=sort_by)
 
         df = df.loc[self.indices]
-        df = df.reset_index(drop=self.index.name is None)[columns]
+        df = df.reset_index(drop=self.index.name is None)[list(columns)]
         df.columns = df.columns.droplevel(1)
 
         if not os.path.isfile(path):
