@@ -28,7 +28,7 @@ setup(
         'dill>=0.2.7.1',
         'pint>=0.8.1',
         'tdigest>=0.5.2.2',
-        'tqdm==4.30.0',
+        'tqdm>=4.30.0',
         'segyio==1.8.3',
         'scikit-image>=0.13.1',
         'numba>=0.35.0'
