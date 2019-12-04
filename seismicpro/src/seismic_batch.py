@@ -468,22 +468,18 @@ class SeismicBatch(Batch):
         batch : SeismicBatch
             Batch unchanged.
         """
+        if not isinstance(self.index, TraceIndex):
+            raise ValueError('Picking dump works with TraceIndex only')
         data = getattr(self, src)
+        data = np.concatenate(data)
         if input_units == 'samples':
             data = data.astype(int)
             data = self.meta[src_traces]['samples'][data]
 
-        if PICKS_FILE_HEADER not in columns:
-            columns = columns + (PICKS_FILE_HEADER, )
-
-        df = self.index.get_df(reset=False)
-        sort_by = self.meta.get(src, {}).get('sorting')
-        if sort_by is not None:
-            df = df.sort_values(by=sort_by)
-
-        df = df.loc[self.indices]
-        df = df.reset_index(drop=self.index.name is None)[list(columns)]
+        df = self.index.get_df(self.indices, reset=True)[list(columns)]
         df.columns = df.columns.droplevel(1)
+
+        df[PICKS_FILE_HEADER] = data
 
         if not os.path.isfile(path):
             df.to_csv(path, index=False, header=True, mode='a')
