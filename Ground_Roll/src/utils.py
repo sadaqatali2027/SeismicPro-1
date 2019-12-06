@@ -5,7 +5,7 @@ import numpy as np
 
 from seismicpro.batchflow import Pipeline, V, B
 
-from seismicpro.src import FieldIndex, SeismicDataset
+from seismicpro.src import FieldIndex, SeismicDataset, seismic_plot
 
 def make_index(paths, index_type=FieldIndex, extra_headers=None):
     """ make index given components and paths"""
@@ -28,3 +28,11 @@ def load_arrs(i, index, components):
     ppl = ppl.run(batch_size=1, n_epochs=1, drop_last=False, shuffle=False)
 
     return {c: ppl.get_variable(c)[0] for c in components}
+
+def check_res(i, index, components, cv=0.1):  
+    
+    arrs = load_arrs(i, index, components=components)   
+    seismic_plot(list(arrs.values()), names=list(arrs.keys()),
+                 figsize=(19, 7), cmap='gray', vmin=-cv, vmax=cv, title='Field {}'.format(index.indices[i]))
+    
+    return arrs
