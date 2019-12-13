@@ -803,12 +803,27 @@ def check_unique_fieldrecord_across_surveys(surveys_by_fieldrecord, index):
     if len(surveys_by_fieldrecord) != 1:
         raise ValueError('Field {} represents data from more than one survey!'.format(index))
 
-def _crop(field, coords, shape):
-    "Perfom crop"
+def _crop(image, coords, shape):
+    """ Perform crops from the image.
+    Number of crops defined by the number of elements in coords.
+
+    Parameters
+    ----------
+    image : np.array
+        Image to crop from.
+    coords: list of tuples
+        The list of top-left (x,y) coordinates for each crop.
+    shape: tuple of ints
+        Crop shape.
+
+    Returns
+    -------
+    res: np.array, dtype='O'
+        Array with crops.
+    """
     res = np.empty((len(coords), ), dtype='O')
     for i, (x, y) in enumerate(coords):
-        if (x + shape[0] > field.shape[0]) or (y + shape[1] > field.shape[1]):
-            raise ValueError('Resulted crop shape are less than expected.')
-        res[i] = field[x:x+shape[0], y:y+shape[1]]
-
+        if (x + shape[0] > image.shape[0]) or (y + shape[1] > image.shape[1]):
+            raise ValueError('Resulting crop shape is less than expected.')
+        res[i] = image[x:x+shape[0], y:y+shape[1]]
     return res
