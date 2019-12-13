@@ -1254,14 +1254,8 @@ class SeismicBatch(Batch):
         getattr(self, dst)[pos] = equalized_field
         return self
 
-    def _post_random_crop(self, coords, **kwargs):
-        _ = kwargs.pop('num_crops') # pop as the `crop` method does not reqiure this kwarg
-        self.crop(coords=coords, **kwargs)
-        return self
-
     @action
     @inbatch_parallel(init='_init_component')
-    @apply_to_each_component
     def random_crop(self, index, src, num_crops, shape, dst=None):
         """ Random crop from seismograms.
 
@@ -1298,10 +1292,12 @@ class SeismicBatch(Batch):
             dst = (dst, )
 
         pos = self.get_pos(None, src[0], index)
-        field = getattr(self, src[0])[pos]
 
         # Sample coords
         if isinstance(num_crops, int) and num_crops > 0:
+            field = getattr(self, src[0])[pos]
+            if (field.shape[0] < shape[0]) or (field.shape[1] < shape[1]):
+                raise ValueError('Field shape {0} is less then crop shape {1}'. format(field.shape, shape))
             x = np.random.randint(field.shape[0]-shape[0], size=num_crops)
             y = np.random.randint(field.shape[1]-shape[1], size=num_crops)
             xy = list(zip(x, y))
@@ -1359,12 +1355,11 @@ class SeismicBatch(Batch):
             dst = (dst, )
 
         pos = self.get_pos(None, src[0], index)
-        field = getattr(self, src[0])[pos]
 
-        if isinstance(coords[0][0], (list, tuple)) & (len(coords) == len(self)): # crop individual coords
-            xy = coords[pos]
-        elif isinstance(coords[0], (list, tuple)): # crop the same coords for each seismogramm
+        if isinstance(coords[0], (list, tuple)): # crop the same coords for each seismogramm
             xy = coords
+            if isinstance(coords[0][0], (list, tuple)) & (len(coords) == len(self)): # crop individual coords
+                xy = coords[pos]
         else:
             raise ValueError('Coords not specified correctly')
 
