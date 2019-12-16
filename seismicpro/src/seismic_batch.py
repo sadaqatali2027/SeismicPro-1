@@ -471,7 +471,6 @@ class SeismicBatch(Batch):
         if not isinstance(self.index, TraceIndex):
             raise ValueError('Picking dump works with TraceIndex only')
         data = getattr(self, src)
-        data = np.concatenate(data)
         if input_units == 'samples':
             data = data.astype(int)
             data = self.meta[src_traces]['samples'][data]
