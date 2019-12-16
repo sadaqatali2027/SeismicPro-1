@@ -20,6 +20,7 @@ from .plot_utils import IndexTracker, spectrum_plot, seismic_plot, statistics_pl
 INDEX_UID = 'TRACE_SEQUENCE_FILE'
 
 PICKS_FILE_HEADER = 'FIRST_BREAK_TIME'
+GEOM_CHECK_HEADER = 'CORRECT_GEOM'
 
 
 ACTIONS_DICT = {
@@ -376,6 +377,8 @@ class SeismicBatch(Batch):
             return self._dump_segy(src, path, **kwargs)
         if fmt == 'picks':
             return self._dump_picking(src, path, **kwargs)
+        if fmt == 'geom':
+            return self._dump_geometry_flags(src, path, **kwargs)
         raise NotImplementedError('Unknown format.')
 
     @action
@@ -510,6 +513,8 @@ class SeismicBatch(Batch):
             return self._load_segy(src=components, dst=components, **kwargs)
         if fmt == 'picks':
             return self._load_picking(components=components)
+        if fmt == 'index':
+            return self._load_from_index(dst=components, **kwargs)
 
         return super().load(src=src, fmt=fmt, components=components, **kwargs)
 
@@ -1371,4 +1376,49 @@ class SeismicBatch(Batch):
         n_skip = max((np.abs(trace[x:]) > threshold).argmax() - 1, 0)
         x += n_skip
         getattr(self, dst)[pos] = x
+        return self
+
+    @action
+    @inbatch_parallel(init='_init_component')
+    def _load_from_index(self, index, *args, key, dst, **kwargs):
+        """Load values from index dataframe to a component
+        """
+        _ = args, kwargs
+        pos = self.get_pos(None, None, index)
+        getattr(self, dst)[pos] = self.index.get_df(index)[key].values
+
+        return self
+
+    @action
+    def _dump_geometry_flags(self, src, path, columns=('FieldRecord',)):
+        """Dump results of check for geometry assignment correctness to file.
+
+        Parameters
+        ----------
+        src : str
+            Source to get flags from.
+        path : str
+            Output file path.
+        columns: array_like
+            Columns to include in the output file.
+            In case `CORRECT_GEOM` not included it will be added automatically.
+
+        Returns
+        -------
+        batch : SeismicBatch
+            Batch unchanged.
+        """
+        if not isinstance(self.index, FieldIndex):
+            raise ValueError('Geometry check dump works with FieldIndex only')
+        data = getattr(self, src)
+
+        df = self.index.get_df(reset=True)[list(columns)].drop_duplicates()
+        df.columns = df.columns.droplevel(1)
+
+        df[GEOM_CHECK_HEADER] = data
+
+        if not os.path.isfile(path):
+            df.to_csv(path, index=False, header=True, mode='a')
+        else:
+            df.to_csv(path, index=False, header=None, mode='a')
         return self
