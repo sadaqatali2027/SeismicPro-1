@@ -285,6 +285,8 @@ class KNNIndex(TraceIndex):
     ----------
     n_neighbors : int
         Group size parameter.
+    raise_error: bool
+        Wheather to raise error in case 2 recievers with the same coordinates found on the same shot, default True
     kwargs : dict
         Named arguments for ```batchflow.FilesIndex````.
 
@@ -299,7 +301,8 @@ class KNNIndex(TraceIndex):
         traces. Columns include FieldRecord, TraceNumber, TRACE_SEQUENCE_FILE, file_id and
         a number of extra_headers if specified.
     """
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, raise_error=True, **kwargs):
+        self.raise_error = raise_error
         kwargs['index_name'] = 'KNN'
         super().__init__(*args, **kwargs)
 
@@ -318,7 +321,8 @@ class KNNIndex(TraceIndex):
             nbrs = NearestNeighbors(n_neighbors=n_neighbors, algorithm='ball_tree')
             _, indices = nbrs.fit(data).kneighbors(data)
             if not np.all(indices[:, 0] == np.arange(len(data))):
-                raise ValueError("Faild to build KNNIndex. Duplicated CDP.")
+                if self.raise_error:
+                    raise ValueError("Faild to build KNNIndex. Duplicated CDP.")
 
             dfs.append(df.iloc[np.hstack(indices)])
         df = pd.concat(dfs).reset_index(drop=True)
