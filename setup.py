@@ -20,12 +20,14 @@ setup(
     platforms='any',
     install_requires=[
         'numpy>=1.16.0',
+        'scipy-=1.3.3',
         'pandas>=0.24.0',
         'scikit-learn==0.21.3',
+        'PyWavelets>=1.0.1',
         'matplotlib>=3.0.2',
         'dill>=0.2.7.1',
         'tdigest>=0.5.2.2',
-        'tqdm>=4.30.0',
+        'tqdm==4.30.0',
         'segyio==1.8.3',
         'scikit-image>=0.13.1',
         'numba>=0.35.0'
