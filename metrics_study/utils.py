@@ -121,7 +121,7 @@ def draw_modifications_dist(modifications, traces_frac=0.1, distances='sum_abs',
                                                     dist_fn=dist_fn, time_frame_width=time_frame_width,
                                                     noverlap=noverlap, window=window)
 
-            distances_strings.append(r"$\mu$={:.4}".format(np.mean(dist_a)))
+            distances_strings.append(r"$\mu$={:.4f}".format(np.mean(dist_a)))
 
         axs[i].imshow(mod.T, vmin=vmin, vmax=vmax, cmap='gray')
         rect = patches.Rectangle((0, 0), n_use_traces, n_ts, edgecolor='r', facecolor='none', lw=1)
@@ -136,13 +136,13 @@ def draw_modifications_dist(modifications, traces_frac=0.1, distances='sum_abs',
 
     plt.show()
 
-    
+
 def spectrum_plot_with_metrics(arrs, frame, rate, max_freq=None, names=None,
-                  figsize=None, save_to=None, **kwargs):
+                               figsize=None, save_to=None, **kwargs):
     """
-    Plot seismogram(s) and power spectrum of given region in the seismogram(s) 
+    Plot seismogram(s) and power spectrum of given region in the seismogram(s)
     and show distances computed relative to 1-st given seismogram
-    
+
     Parameters
     ----------
     arrs : array-like
@@ -161,7 +161,7 @@ def spectrum_plot_with_metrics(arrs, frame, rate, max_freq=None, names=None,
         If not None, save plot to given path.
     kwargs : dict
         Named argumets to matplotlib.pyplot.imshow.
-    
+
     """
 
     if isinstance(arrs, np.ndarray) and arrs.ndim == 2:
@@ -169,7 +169,7 @@ def spectrum_plot_with_metrics(arrs, frame, rate, max_freq=None, names=None,
 
     if isinstance(names, str):
         names = (names,)
-        
+
     origin = arrs[0]
     n_use_traces = frame[0].stop - frame[0].start
 
@@ -181,11 +181,11 @@ def spectrum_plot_with_metrics(arrs, frame, rate, max_freq=None, names=None,
                                  frame[1].stop - frame[1].start,
                                  edgecolor='r', facecolor='none', lw=2)
         ax[0, i].add_patch(rect)
-        
+
         dist_m = get_windowed_spectrogram_dists(arr[0:n_use_traces], origin[0:n_use_traces])
         dist = np.mean(dist_m)
-        
-        ax[0, i].set_title('Seismogram {}. $\mu$={}'.format(names[i] if names is not None else '', dist))
+
+        ax[0, i].set_title(r'Seismogram {}. $\mu$={:.4f}'.format(names[i] if names is not None else '', dist))
         ax[0, i].set_aspect('auto')
         spec = abs(np.fft.rfft(arr[frame], axis=1))**2
         freqs = np.fft.rfftfreq(len(arr[frame][0]), d=rate)
@@ -198,7 +198,12 @@ def spectrum_plot_with_metrics(arrs, frame, rate, max_freq=None, names=None,
         ax[1, i].set_title('Spectrum plot {}'.format(names[i] if names is not None else ''))
         ax[1, i].set_aspect('auto')
 
-        
+        if save_to:
+            plt.savefig(save_to, transparent=True)
+
+        plt.show()
+
+
 def get_modifications_list(batch, i):
     """ get seismic batch components with short names """
     res = []
