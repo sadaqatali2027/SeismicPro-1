@@ -20,7 +20,7 @@ setup(
     platforms='any',
     install_requires=[
         'numpy>=1.16.0',
-        'scipy-=1.3.3',
+        'scipy==1.3.3',
         'pandas>=0.24.0',
         'scikit-learn==0.21.3',
         'PyWavelets>=1.0.1',
