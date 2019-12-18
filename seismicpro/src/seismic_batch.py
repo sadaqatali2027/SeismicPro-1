@@ -1267,7 +1267,7 @@ class SeismicBatch(Batch):
             The batch components to put the result in.
         num_crops: int
             Number of random crops.
-        shape: tuple of ints.
+        shape: tuple of ints
             Crop shape.
 
         Notes
@@ -1322,12 +1322,12 @@ class SeismicBatch(Batch):
             The batch components to get the data from.
         dst : str, array-like
             The batch components to put the result in.
-        coords: list, list of lists, default None
+        coords: list, list of lists
             The list of top-left (x,y) coordinates for each crop.
                 - if `coords` is the list then crops from the same coords for each item in the batch.
                 - if `coords` is the list of lists then crops from individual coords for each item in the batch.
                   In this case condition `len(coords) == len(batch)` must be satisfied.
-        shape: tuple
+        shape: tuple of ints
             Crop shape.
 
         Notes
@@ -1354,13 +1354,14 @@ class SeismicBatch(Batch):
         elif isinstance(dst, str):
             dst = (dst, )
 
-        pos = self.get_pos(None, src[0], index)
+        pos = self.get_pos(None, None, index)
 
+        xy = None
         if isinstance(coords[0], (list, tuple)): # crop the same coords for each seismogramm
             xy = coords
             if isinstance(coords[0][0], (list, tuple)) & (len(coords) == len(self)): # crop individual coords
                 xy = coords[pos]
-        else:
+        if xy is None:
             raise ValueError('Coords not specified correctly')
 
         for isrc, idst in zip(src, dst):
