@@ -1291,7 +1291,7 @@ class SeismicBatch(Batch):
         elif isinstance(dst, str):
             dst = (dst, )
 
-        pos = self.get_pos(None, src[0], index)
+        pos = self.get_pos(None, None, index)
 
         # Sample coords
         if isinstance(num_crops, int) and num_crops > 0:
