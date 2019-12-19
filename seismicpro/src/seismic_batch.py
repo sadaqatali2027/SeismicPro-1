@@ -1357,9 +1357,9 @@ class SeismicBatch(Batch):
         pos = self.get_pos(None, None, index)
 
         xy = None
-        if isinstance(coords[0], (list, tuple)): # crop the same coords for each seismogramm
+        if isinstance(coords, (list, tuple)) and isinstance(coords[0], (list, tuple)): # crop the same coords for each seismogramm
             xy = coords
-            if isinstance(coords[0][0], (list, tuple)) & (len(coords) == len(self)): # crop individual coords
+            if isinstance(coords[0][0], (list, tuple)) and (len(coords) == len(self)): # crop individual coords
                 xy = coords[pos]
         if xy is None:
             raise ValueError('Coords not specified correctly')
