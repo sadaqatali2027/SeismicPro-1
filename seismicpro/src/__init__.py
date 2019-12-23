@@ -1,7 +1,7 @@
 """Init file"""
 from .seismic_batch import SeismicBatch
 from .seismic_index import (FieldIndex, TraceIndex, BinsIndex,
-                            SegyFilesIndex, CustomIndex, KNNIndex)
+                            SegyFilesIndex, CustomIndex, KNNIndex, SeismicIndex)
 from .seismic_dataset import SeismicDataset
 
 from .plot_utils import (spectrum_plot, seismic_plot, statistics_plot,

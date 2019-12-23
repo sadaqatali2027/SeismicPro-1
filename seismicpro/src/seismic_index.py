@@ -10,7 +10,7 @@ from .utils import make_bin_index, build_sps_df, build_segy_df
 from .plot_utils import show_2d_heatmap, show_1d_heatmap
 
 
-class TraceIndex(DatasetIndex):
+class SeismicIndex(DatasetIndex):
     """Index for individual seismic traces.
 
     Parameters
@@ -220,7 +220,18 @@ class TraceIndex(DatasetIndex):
         return type(self).from_index(index=index, idf=self._idf, index_name=self.name)
 
 
-class SegyFilesIndex(TraceIndex):
+class TraceIndex(SeismicIndex):
+    """ Index for individual seismic traces. """
+
+    def __init__(self, *args, **kwargs):
+
+        super().__init__(*args, **kwargs)
+        self._idf['TraceId'] = (self._idf['FieldRecord'].astype(str).str
+                                .cat(self._idf['TraceNumber'].astype(str)))
+        self._idf.set_index('TraceId')
+        # kwargs['index_name'] = 'TraceId'
+
+class SegyFilesIndex(SeismicIndex):
     """Index for SEGY files.
 
     Parameters
@@ -246,7 +257,7 @@ class SegyFilesIndex(TraceIndex):
         super().__init__(*args, **kwargs)
 
 
-class CustomIndex(TraceIndex):
+class CustomIndex(SeismicIndex):
     """Index for any SEGY header.
 
     Parameters
@@ -278,7 +289,7 @@ class CustomIndex(TraceIndex):
         super().__init__(*args, **kwargs)
 
 
-class KNNIndex(TraceIndex):
+class KNNIndex(SeismicIndex):
     """Index for groups of k nearest located seismic traces.
 
     Parameters
@@ -331,7 +342,7 @@ class KNNIndex(TraceIndex):
         return df
 
 
-class FieldIndex(TraceIndex):
+class FieldIndex(SeismicIndex):
     """Index for field records.
 
     Parameters
@@ -359,7 +370,7 @@ class FieldIndex(TraceIndex):
         super().__init__(*args, **kwargs)
 
 
-class BinsIndex(TraceIndex):
+class BinsIndex(SeismicIndex):
     """Index for bins of CDP.
 
     Parameters
