@@ -15,6 +15,14 @@ from ..batchflow import FilesIndex
 DEFAULT_SEGY_HEADERS = ['FieldRecord', 'TraceNumber', 'TRACE_SEQUENCE_FILE']
 FILE_DEPENDEND_COLUMNS = ['TRACE_SEQUENCE_FILE', 'file_id']
 
+
+def make_index(paths, index_type, extra_headers=None, index_name=None):
+    """ make index given components and paths"""
+    return functools.reduce(lambda x, y: x.merge(y),
+                            (index_type(name=name, path=path, extra_headers=extra_headers, index_name=index_name)
+                             for name, path in paths.items()))
+
+
 def partialmethod(func, *frozen_args, **frozen_kwargs):
     """Wrap a method with partial application of given positional and keyword
     arguments.

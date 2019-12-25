@@ -10,7 +10,7 @@ import segyio
 
 from ..batchflow import action, inbatch_parallel, Batch, any_action_failed
 
-from .seismic_index import SegyFilesIndex, FieldIndex, KNNIndex, TraceIndex
+from .seismic_index import SegyFilesIndex, FieldIndex, KNNIndex, TraceIndex, CustomIndex
 
 from .utils import (FILE_DEPENDEND_COLUMNS, partialmethod, calculate_sdc_for_field, massive_block,
                     check_unique_fieldrecord_across_surveys)
@@ -65,6 +65,22 @@ TEMPLATE_DOCSTRING = """
         Transformed batch. Changes ``dst`` component.
 """
 TEMPLATE_DOCSTRING = dedent(TEMPLATE_DOCSTRING).strip()
+
+
+def check_index_type(valid_type, valid_index_name=None):
+    """ Decorator to check if batch has needed index type """
+    def wrapper(method):
+        def checker(self, *args, **kwargs):
+            if not isinstance(self.index, valid_type):
+                raise ValueError("Index must be {}, not {}".format(valid_type, type(self.index)))
+            index_name = self.index.get_df(reset=False).index.name
+            if valid_type == CustomIndex and index_name != valid_index_name:
+                raise ValueError("Index name must be {}, not {}".format(valid_index_name, index_name))
+            return method(self, *args, **kwargs)
+        return checker
+
+    return wrapper
+
 
 def apply_to_each_component(method):
     """Combine list of src items and list dst items into pairs of src and dst items
@@ -124,6 +140,7 @@ def add_actions(actions_dict, template_docstring):
 
         return cls
     return decorator
+
 
 @add_actions(ACTIONS_DICT, TEMPLATE_DOCSTRING)  # pylint: disable=too-many-public-methods,too-many-instance-attributes
 class SeismicBatch(Batch):
@@ -650,7 +667,6 @@ class SeismicBatch(Batch):
         return self
 
     @inbatch_parallel(init="_init_component", target="threads")
-    @apply_to_each_component
     def _sort(self, index, src, sort_by, current_sorting, dst=None):
         """Sort traces.
 
@@ -684,7 +700,8 @@ class SeismicBatch(Batch):
         return self
 
     @action
-    def sort_traces(self, *args, src, sort_by, dst):
+    @apply_to_each_component
+    def sort_traces(self, *args, src, sort_by, dst=None):
         """Sort traces.
 
         Parameters
@@ -789,11 +806,13 @@ class SeismicBatch(Batch):
 
     @action
     @inbatch_parallel(init='_init_component')
-    def hodograph_straightening(self, index, speed, src=None, dst=None, num_mean_tr=4, sample_time=None):
+    @apply_to_each_component
+    @check_index_type(CustomIndex, 'CDP')
+    def hodograph_straightening(self, index, velocities, src=None, dst=None, num_mean_tr=4, sample_time=None):
         r""" Straightening up the travel time curve with normal grading. Shift for each
         time value calculated by following way:
 
-        $$\vartriangle t = t(0) \left(\left( 1 + \left( \frac{x}{V(t) t(0)}\right)\right)^{1/2} - 1\right)$$
+        $$ t - t_0 = \sqrt{t_0^2 + l^2 / V^2} $$
 
         New amplitude value for t(0) is the mean value of ```num_mean_tr```'s adjacent
         amplitudes from $t(0) + \vartriangle t$.
@@ -802,6 +821,9 @@ class SeismicBatch(Batch):
         ----------
         speed : array or array of arrays
             Speed law for traces.
+            If 1-d array of same length as traces - array of velocities(m/s) in each time stamp
+            If 2-d array - it is interpreted as array of pairs (time(ms), velocity(m/s))
+            and velocities in each time stamp are interpolated. Time should be increasing
         src : str, array-like
             The batch components to get the data from.
         dst : str, array-like
@@ -825,12 +847,10 @@ class SeismicBatch(Batch):
         ------
         ValueError : Raise if traces is not sorted by offset.
         """
-        dst = src if dst is None else dst
         pos = self.get_pos(None, src, index)
         field = getattr(self, src)[pos]
 
         offset = np.sort(self.index.get_df(index=index)['offset'])
-        speed_conc = np.array(speed[:field.shape[1]])
 
         if self.meta[src]['sorting'] != 'offset':
             raise ValueError('All traces should be sorted by offset not {}'.format(self.meta[src]['sorting']))
@@ -839,27 +859,40 @@ class SeismicBatch(Batch):
         elif sample_time is None:
             raise ValueError('Sample time should be specified or by self.meta[src] or by sample_time.')
 
-        if len(speed_conc) != field.shape[1]:
-            raise ValueError('Speed must have shape equal to trace length, not {} but {}'.format(speed_conc.shape[0],
-                                                                                                 field.shape[1]))
-        t_zero = (np.arange(1, field.shape[1]+1)*sample_time)/1000
-        time_range = np.arange(0, field.shape[1])
-        new_field = []
-        calc_delta = lambda t_z, spd, ofst: t_z*((1 + (ofst/(spd*t_z+1e-6))**2)**.5 - 1)
+        velocities = np.array(velocities)
+        num_ts = field.shape[1]
+        time_range_ms = np.arange(0, num_ts) * sample_time
+        if velocities.ndim == 2 and velocities.shape[1] == 2:
+            if not np.all(np.diff(velocities[:, 0]) > 0):
+                raise ValueError('sample velocities times are not increasing! check sorting')
+            speed_conc = np.interp(time_range_ms, velocities[:, 0], velocities[:, 1])
+        elif velocities.ndim == 1 and velocities.shape[0] == num_ts:
+            speed_conc = velocities
+        else:
+            raise ValueError('Velocities specified incorrectly!')
 
-        for ix, off in enumerate(offset):
-            time_x = calc_delta(t_zero, speed_conc, off)
-            shift = np.round((time_x*1000)/sample_time).astype(int)
-            down_ix = time_range + shift
+        speed_conc /= 1000  # convert from m/s to m/ms
 
+        mean_traces = None
+        if num_mean_tr:
             left = -int(num_mean_tr/2) + (~num_mean_tr % 2)
             right = left + num_mean_tr
             mean_traces = np.arange(left, right).reshape(-1, 1)
 
-            ix_to_mean = np.zeros((num_mean_tr, *down_ix.shape)) + [down_ix]*num_mean_tr + mean_traces
-            ix_to_mean = np.clip(ix_to_mean, 0, time_range[-1]).astype(int)
+        new_field = []
 
-            new_field.append(np.mean(field[ix][ix_to_mean], axis=0))
+        for ix, off in enumerate(offset):
+            new_time_ms = np.sqrt(time_range_ms**2 + (off/speed_conc)**2)
+            new_ts = np.round(new_time_ms / sample_time)
+
+            if mean_traces is not None:
+                ix_to_mean = np.stack([new_ts]*num_mean_tr) + mean_traces
+                ix_to_mean = np.clip(ix_to_mean, 0, num_ts - 1).astype(int)
+
+                new_field.append(np.mean(field[ix][ix_to_mean], axis=0))
+            else:
+                new_ts = np.clip(new_ts, 0, num_ts - 1).astype(int)
+                new_field.append(field[ix][new_ts])
 
         getattr(self, dst)[pos] = np.array(new_field)
         return self
