@@ -3,6 +3,8 @@ from functools import reduce
 
 import numpy as np
 
+from matplotlib import pyplot as plt
+
 from seismicpro.batchflow import Pipeline, V, B
 
 from seismicpro.src import FieldIndex, SeismicDataset, seismic_plot
@@ -44,4 +46,57 @@ def check_res(i, index, components, mode='img', index_type=FieldIndex, index_nam
     
     return arrs
 
-    
+
+def visualize_geom(df):
+    """
+    cols = [
+        'TRACE_SEQUENCE_LINE',
+        'FieldRecord', # 'FieldRecord' = 'SourceY' x 'SourceX'
+        'SourceY', 'SourceX', 'GroupY', 'GroupX',
+        'CDP_X', # 'CROSSLINE_3D'
+        'CDP_Y', # 'INLINE_3D'
+        'CDP', # 'CDP_X' x 'CDP_Y'
+        'offset',
+
+        'ReceiverDatumElevation', # rline
+        'SourceDatumElevation', # reciever id inside rline
+        'SourceWaterDepth', # sline
+        'GroupWaterDepth', # source id in sline
+    ]
+
+    """
+    print("Fields: {}, bins: {}".format(df.FieldRecord.nunique(), df.CDP.nunique()))
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 7))
+
+    ax1.scatter(x=df['GroupX'], y=df['GroupY'], c='green', marker='^', label='Reciever')
+    ax1.scatter(x=df['CDP_X'], y=df['CDP_Y'], c='blue', marker='.', label='CDP', alpha=0.1)
+
+    d1 = df[['FieldRecord', 'SourceX', 'SourceY']].droplevel(1, axis=1).drop_duplicates().set_index('FieldRecord')
+    d1['tr_count'] = df['FieldRecord'].value_counts()
+    cm = ax1.scatter(x=d1['SourceX'], y=d1['SourceY'], c=d1['tr_count'], marker='v', cmap='jet')
+
+    plt.colorbar(cm, ax=ax1);
+    ax1.set_title('Geometry + Shots: trace counts');
+
+    ax1.legend();
+
+
+    def heatmap(index_col, x_col, y_col, fillna=None):
+        tr_count= df[index_col].value_counts()
+        d1 = df[[index_col, x_col, y_col]].droplevel(1, axis=1).drop_duplicates().set_index(index_col)
+        d1['tr_count'] = tr_count
+
+        p = d1.pivot(index=x_col, columns=y_col, values='tr_count')
+
+        if fillna is not None:
+            rindex = np.arange(df[x_col].min(), df[x_col].max(), np.diff(np.unique(df[x_col].values)).min())
+            cindex = np.arange(df[y_col].min(), df[y_col].max(), np.diff(np.unique(df[y_col].values)).min())
+            return p.reindex(rindex).reindex(columns=cindex).fillna(fillna)
+        else:
+            return p
+
+    p2 = heatmap('CDP', 'CDP_X', 'CDP_Y', fillna=0)
+    sc = ax2.imshow(p2.values.T, origin='lower', aspect='equal', cmap='seismic')
+    plt.colorbar(sc, ax=ax2);
+    ax2.set_title('Bins')
