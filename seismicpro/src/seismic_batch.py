@@ -809,17 +809,17 @@ class SeismicBatch(Batch):
     @apply_to_each_component
     @check_index_type(CustomIndex, 'CDP')
     def hodograph_straightening(self, index, velocities, src=None, dst=None, num_mean_tr=4, sample_time=None):
-        r""" Straightening up the travel time curve with normal grading. Shift for each
-        time value calculated by following way:
+        r""" Straightening up the travel time curve with normal grading.
+        Shifted time is calculated as follows:
 
-        $$ t - t_0 = \sqrt{t_0^2 + l^2 / V^2} $$
+        $$ t_new = \sqrt{t_0^2 + l^2 / V^2} $$
 
-        New amplitude value for t(0) is the mean value of ```num_mean_tr```'s adjacent
-        amplitudes from $t(0) + \vartriangle t$.
+        If ```num_mean_tr``` can be evaluated to True,
+        new amplitude value for t_0 is the mean value of ```num_mean_tr```'s adjacent amplitudes from t_new.
 
         Parameters
         ----------
-        speed : array or array of arrays
+        velocities : 1-d array or 2-d array
             Speed law for traces.
             If 1-d array of same length as traces - array of velocities(m/s) in each time stamp
             If 2-d array - it is interpreted as array of pairs (time(ms), velocity(m/s))
@@ -829,7 +829,7 @@ class SeismicBatch(Batch):
         dst : str, array-like
             The batch components to put the result in.
         num_mean_tr : int ,optional default 4
-            Number of timestamps to meaning new amplitude value.
+            Number of timestamps for averaging new amplitude value.
         sample_time : int, float, optional
             Difference between real time and samples. Note that ```sample_time``` is measured in milliseconds.
 
