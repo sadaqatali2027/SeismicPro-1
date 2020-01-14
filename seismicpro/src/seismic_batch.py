@@ -823,7 +823,7 @@ class SeismicBatch(Batch):
             Speed law for traces.
             If 1-d array of same length as traces - array of velocities(m/s) in each time stamp
             If 2-d array - it is interpreted as array of pairs (time(ms), velocity(m/s))
-            and velocities in each time stamp are interpolated. Time should be increasing
+            and velocities in each time stamp are interpolated. Time should increase.
         src : str, array-like
             The batch components to get the data from.
         dst : str, array-like
@@ -864,7 +864,7 @@ class SeismicBatch(Batch):
         time_range_ms = np.arange(0, num_ts) * sample_time
         if velocities.ndim == 2 and velocities.shape[1] == 2:
             if not np.all(np.diff(velocities[:, 0]) > 0):
-                raise ValueError('sample velocities times are not increasing! check sorting')
+                raise ValueError('Sample velocities times are not increasing!')
             speed_conc = np.interp(time_range_ms, velocities[:, 0], velocities[:, 1])
         elif velocities.ndim == 1 and velocities.shape[0] == num_ts:
             speed_conc = velocities
