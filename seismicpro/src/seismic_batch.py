@@ -12,9 +12,10 @@ from ..batchflow import action, inbatch_parallel, Batch, any_action_failed
 from .seismic_index import SegyFilesIndex, FieldIndex
 
 from .utils import (FILE_DEPENDEND_COLUMNS, partialmethod, calculate_sdc_for_field, massive_block,
-                    check_unique_fieldrecord_across_surveys, _crop)
+                    check_unique_fieldrecord_across_surveys)
 from .file_utils import write_segy_file
 from .plot_utils import IndexTracker, spectrum_plot, seismic_plot, statistics_plot, gain_plot
+from .seismic_batch_tools import _crop
 
 
 PICKS_FILE_HEADERS = ['FieldRecord', 'TraceNumber', 'timeOffset']
@@ -1298,8 +1299,8 @@ class SeismicBatch(Batch):
             field = getattr(self, src[0])[pos]
             if (field.shape[0] < shape[0]) or (field.shape[1] < shape[1]):
                 raise ValueError('Field shape {0} is less then crop shape {1}'. format(field.shape, shape))
-            x = np.random.randint(field.shape[0]-shape[0], size=num_crops)
-            y = np.random.randint(field.shape[1]-shape[1], size=num_crops)
+            x = np.random.randint(field.shape[0] - shape[0] + 1, size=num_crops)
+            y = np.random.randint(field.shape[1] - shape[1] + 1, size=num_crops)
             xy = list(zip(x, y))
         else:
             raise ValueError('num_crops must be positive integer, got', num_crops)
@@ -1313,6 +1314,7 @@ class SeismicBatch(Batch):
 
     @action
     @inbatch_parallel(init='_init_component')
+    @apply_to_each_component
     def crop(self, index, src, coords, shape, dst=None):
         """ Crop from seismograms by given coordinates.
 
@@ -1347,13 +1349,6 @@ class SeismicBatch(Batch):
         if not isinstance(self.index, FieldIndex):
             raise NotImplementedError("Index must be FieldIndex, not {}".format(type(self.index)))
 
-        if isinstance(src, str):
-            src = (src, )
-        if dst is None:
-            dst = src
-        elif isinstance(dst, str):
-            dst = (dst, )
-
         pos = self.get_pos(None, None, index)
 
         xy = None
@@ -1364,8 +1359,7 @@ class SeismicBatch(Batch):
         if xy is None:
             raise ValueError('Coords not specified correctly')
 
-        for isrc, idst in zip(src, dst):
-            field = getattr(self, isrc)[pos]
-            getattr(self, idst)[pos] = _crop(field, xy, shape)
+        field = getattr(self, src)[pos]
+        getattr(self, dst)[pos] = _crop(field, xy, shape)
 
         return self
