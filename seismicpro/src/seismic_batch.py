@@ -895,6 +895,7 @@ class SeismicBatch(Batch):
                 new_field.append(field[ix][new_ts])
 
         getattr(self, dst)[pos] = np.array(new_field)
+        self.meta[dst] = self.meta[src].copy()
         return self
 
     @action
