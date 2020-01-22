@@ -808,7 +808,7 @@ class SeismicBatch(Batch):
     @inbatch_parallel(init='_init_component')
     @apply_to_each_component
     @check_index_type(CustomIndex, 'CDP')
-    def hodograph_straightening(self, index, velocities, src=None, dst=None, num_mean_tr=4, sample_time=None):
+    def hodograph_straightening(self, index, velocities, src=None, dst=None, num_mean_tr=0, sample_time=None):
         r""" Straightening up the travel time curve with normal grading.
         Shifted time is calculated as follows:
 
@@ -828,8 +828,8 @@ class SeismicBatch(Batch):
             The batch components to get the data from.
         dst : str, array-like
             The batch components to put the result in.
-        num_mean_tr : int ,optional default 4
-            Number of timestamps for averaging new amplitude value.
+        num_mean_tr : int or None, optional
+            Number of timestamps for smoothing new amplitude value. If 0 (default) or None, no smoothing is performed
         sample_time : int, float, optional
             Difference between real time and samples. Note that ```sample_time``` is measured in milliseconds.
 
