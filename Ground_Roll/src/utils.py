@@ -20,7 +20,9 @@ def load_arrs(i, index, components, index_type=FieldIndex, index_name=None):
     ppl = reduce(lambda p, c: p.init_variable(c), components, ppl)
     ppl = (ppl
            .load(components=components, fmt='segy', tslice=np.arange(3000))
-           .sort_traces(src=components, dst=components, sort_by='offset'))
+#            .sort_traces(src=components, dst=components, sort_by='offset')
+          )
+    ppl = reduce(lambda p, c: p.sort_traces(src=c, dst=c, sort_by='offset'), components, ppl)
     ppl = reduce(lambda p, c: p.update(V(c), B(c)), components, ppl)
     
     findex = index_type(index, index_name=index_name)

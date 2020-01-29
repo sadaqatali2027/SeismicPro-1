@@ -653,7 +653,7 @@ class SeismicBatch(Batch):
     @apply_to_each_component
     def _sort(self, index, src, sort_by, current_sorting, dst=None):
         """Sort traces.
-
+        
         Parameters
         ----------
         src : str, array-like
@@ -664,7 +664,6 @@ class SeismicBatch(Batch):
             Sorting key.
         current_sorting : str
             Current sorting of `src` component
-
         Returns
         -------
         batch : SeismicBatch
@@ -695,7 +694,6 @@ class SeismicBatch(Batch):
             The batch components to put the result in.
         sort_by : str
             Sorting key.
-
         Returns
         -------
         batch : SeismicBatch
@@ -1376,4 +1374,15 @@ class SeismicBatch(Batch):
         n_skip = max((np.abs(trace[x:]) > threshold).argmax() - 1, 0)
         x += n_skip
         getattr(self, dst)[pos] = x
+        return self
+
+    @action
+    @inbatch_parallel(init='_init_component')
+    @apply_to_each_component
+    def scale(self, index, scale, src, dst=None):
+
+        pos = self.get_pos(None, src, index)
+        el = getattr(self, src)[pos]
+
+        getattr(self, dst)[pos] = el * scale
         return self
