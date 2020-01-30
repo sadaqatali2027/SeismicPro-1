@@ -70,7 +70,7 @@ class UnetAttention3(UnetAtt):
 
                 # Get a single channel with sigmoid activation for the attention branch
                 att = conv_block(att, layout='ca', kernel_size=3, filters=1, units=1,
-                             activation=tf.nn.sigmoid, name='head_att')
+                                 activation=tf.nn.sigmoid, name='head_att')
 
         return main, att, raw
 

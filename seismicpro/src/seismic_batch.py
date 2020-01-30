@@ -653,7 +653,7 @@ class SeismicBatch(Batch):
     @apply_to_each_component
     def _sort(self, index, src, sort_by, current_sorting, dst=None):
         """Sort traces.
-        
+
         Parameters
         ----------
         src : str, array-like
@@ -1380,9 +1380,10 @@ class SeismicBatch(Batch):
     @inbatch_parallel(init='_init_component')
     @apply_to_each_component
     def scale(self, index, scale, src, dst=None):
+        """ multiply all batch items by `scale`"""
 
         pos = self.get_pos(None, src, index)
-        el = getattr(self, src)[pos]
+        item = getattr(self, src)[pos]
 
-        getattr(self, dst)[pos] = el * scale
+        getattr(self, dst)[pos] = item * scale
         return self
