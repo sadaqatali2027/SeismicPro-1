@@ -719,7 +719,7 @@ class SeismicBatch(Batch):
 
     @action
     @apply_to_each_component
-    def sort_traces(self, *args, src, sort_by, dst):
+    def sort_traces(self, *args, src, sort_by, dst=None):
         """Sort traces.
 
         Parameters
