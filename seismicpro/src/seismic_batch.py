@@ -831,7 +831,7 @@ class SeismicBatch(Batch):
         num_mean_tr : int or None, optional
             Number of timestamps for smoothing new amplitude value. If 0 (default) or None, no smoothing is performed
         sample_time : int, float, optional
-            Difference between real time and samples. Note that ```sample_time``` is measured in milliseconds.
+             Difference between real time and samples. Note that ```sample_time``` is measured in milliseconds. If `None`, it is derived from `self.meta[src]`.
 
         Returns
         -------
@@ -857,7 +857,7 @@ class SeismicBatch(Batch):
         if 'samples' in self.meta[src].keys():
             sample_time = np.diff(self.meta[src]['samples'][:2])[0]
         elif sample_time is None:
-            raise ValueError('Sample time should be specified or by self.meta[src] or by sample_time.')
+             raise ValueError('`sample_time` should be specified as it is not present in `self.meta[{}]`'.format(src))
 
         velocities = np.array(velocities)
         num_ts = field.shape[1]
