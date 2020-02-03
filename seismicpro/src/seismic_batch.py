@@ -791,7 +791,7 @@ class SeismicBatch(Batch):
     @action
     @inbatch_parallel(init='_init_component')
     @apply_to_each_component
-    def hodograph_straightening(self, index, velocities, src=None, dst=None, num_mean_tr=0, sample_time=None):
+    def hodograph_straightening(self, index, velocities, src=None, dst=None, num_mean_tr=0):
         r""" Straightening up the travel time curve with normal grading.
         Shifted time is calculated as follows:
 
@@ -813,8 +813,6 @@ class SeismicBatch(Batch):
             The batch components to put the result in.
         num_mean_tr : int or None, optional
             Number of timestamps for smoothing new amplitude value. If 0 (default) or None, no smoothing is performed
-        sample_time : int, float, optional
-             Difference between real time and samples. Note that ```sample_time``` is measured in milliseconds. If `None`, it is derived from `self.meta[src]`.
 
         Returns
         -------
@@ -824,11 +822,11 @@ class SeismicBatch(Batch):
         Note
         ----
         1. Works only with sorted traces by offset.
-        2. Works properly only with FieldIndex with CDP index.
+        2. Works properly only with CustomIndex with CDP index.
 
         Raises
         ------
-        ValueError : Raise if traces is not sorted by offset.
+        ValueError : Raise if traces are not sorted by offset.
         """
         if not isinstance(self.index, CustomIndex):
             raise ValueError("Index must be CustomIndex, not {}".format(type(self.index)))
@@ -845,18 +843,18 @@ class SeismicBatch(Batch):
         if self.meta[src]['sorting'] != 'offset':
             raise ValueError('All traces should be sorted by offset not {}'.format(self.meta[src]['sorting']))
         if 'samples' in self.meta[src].keys():
-            sample_time = np.diff(self.meta[src]['samples'][:2])[0]
-        elif sample_time is None:
-             raise ValueError('`sample_time` should be specified as it is not present in `self.meta[{}]`'.format(src))
+            time_range_ms = self.meta[src]['samples']
+            sample_time = time_range_ms[1] - time_range_ms[0]
+            num_timestamps = len(time_range_ms)
+        else:
+            raise ValueError('`sample_time` should be present in `self.meta[{}]`'.format(src))
 
         velocities = np.array(velocities)
-        num_ts = field.shape[1]
-        time_range_ms = np.arange(0, num_ts) * sample_time
         if velocities.ndim == 2 and velocities.shape[1] == 2:
             if not np.all(np.diff(velocities[:, 0]) > 0):
                 raise ValueError('Sample velocities times are not increasing!')
             speed_conc = np.interp(time_range_ms, velocities[:, 0], velocities[:, 1])
-        elif velocities.ndim == 1 and velocities.shape[0] == num_ts:
+        elif velocities.ndim == 1 and velocities.shape[0] == num_timestamps:
             speed_conc = velocities
         else:
             raise ValueError('Velocities specified incorrectly!')
@@ -877,11 +875,11 @@ class SeismicBatch(Batch):
 
             if mean_traces is not None:
                 ix_to_mean = np.stack([new_ts]*num_mean_tr) + mean_traces
-                ix_to_mean = np.clip(ix_to_mean, 0, num_ts - 1).astype(int)
+                ix_to_mean = np.clip(ix_to_mean, 0, num_timestamps - 1).astype(int)
 
                 new_field.append(np.mean(field[ix][ix_to_mean], axis=0))
             else:
-                new_ts = np.clip(new_ts, 0, num_ts - 1).astype(int)
+                new_ts = np.clip(new_ts, 0, num_timestamps - 1).astype(int)
                 new_field.append(field[ix][new_ts])
 
         getattr(self, dst)[pos] = np.array(new_field)
