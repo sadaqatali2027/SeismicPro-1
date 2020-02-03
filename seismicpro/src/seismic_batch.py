@@ -67,21 +67,6 @@ TEMPLATE_DOCSTRING = """
 TEMPLATE_DOCSTRING = dedent(TEMPLATE_DOCSTRING).strip()
 
 
-def check_index_type(valid_type, valid_index_name=None):
-    """ Decorator to check if batch has needed index type """
-    def wrapper(method):
-        def checker(self, *args, **kwargs):
-            if not isinstance(self.index, valid_type):
-                raise ValueError("Index must be {}, not {}".format(valid_type, type(self.index)))
-            index_name = self.index.get_df(reset=False).index.name
-            if valid_type == CustomIndex and index_name != valid_index_name:
-                raise ValueError("Index name must be {}, not {}".format(valid_index_name, index_name))
-            return method(self, *args, **kwargs)
-        return checker
-
-    return wrapper
-
-
 def apply_to_each_component(method):
     """Combine list of src items and list dst items into pairs of src and dst items
     and apply the method to each pair.
@@ -700,8 +685,7 @@ class SeismicBatch(Batch):
         return self
 
     @action
-    @apply_to_each_component
-    def sort_traces(self, *args, src, sort_by, dst=None):
+    def sort_traces(self, *args, src, sort_by, dst):
         """Sort traces.
 
         Parameters
@@ -807,7 +791,6 @@ class SeismicBatch(Batch):
     @action
     @inbatch_parallel(init='_init_component')
     @apply_to_each_component
-    @check_index_type(CustomIndex, 'CDP')
     def hodograph_straightening(self, index, velocities, src=None, dst=None, num_mean_tr=0, sample_time=None):
         r""" Straightening up the travel time curve with normal grading.
         Shifted time is calculated as follows:
@@ -847,6 +830,13 @@ class SeismicBatch(Batch):
         ------
         ValueError : Raise if traces is not sorted by offset.
         """
+        if not isinstance(self.index, CustomIndex):
+            raise ValueError("Index must be CustomIndex, not {}".format(type(self.index)))
+
+        index_name = self.index.get_df(reset=False).index.name
+        if index_name != 'CDP':
+            raise ValueError("Index name must be CDP, not {}".format(index_name))
+
         pos = self.get_pos(None, src, index)
         field = getattr(self, src)[pos]
 
