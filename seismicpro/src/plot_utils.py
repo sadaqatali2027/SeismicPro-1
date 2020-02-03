@@ -529,3 +529,44 @@ def show_2d_heatmap(idf, figsize=None, save_to=None, dpi=300, **kwargs):
     if save_to is not None:
         plt.savefig(save_to, dpi=dpi)
     plt.show()
+
+def traces_plot(raw, target, predict, figsize=(18,16)):
+    f, axes = plt.subplots(3, 1, figsize=(20, 12))
+    names = ['raw', 'target', 'predict']
+    data = raw, target, predict
+    for i in range(3):
+        axes[i].set_title(names[i])
+        axes[i].plot(data[i][0])
+        axes[i].grid(True)
+    plt.show()
+    
+def plot_loss(loss, n_epochs=None, figsize=(15,10), plot_epochs=False, plot_iters=True, grid=True):
+    """Plot loss values.
+    
+    Parameters
+    ----------
+    loss : sequence
+        Sequence of loss values at each iteration
+    n_epochs: int
+        Number of epochs. Mandatory if plot_epochs is True.
+        Set x-axis to epochs scale.
+    figsize : tuple, optional
+        Output figure size. Default is (15, 10.)
+    plot_iters : bool, optional
+        Plot loss by iterations. Default is False
+    plot_epochs : bool, optional
+        Plot loss by epochs. Default is True
+    """
+    loss = np.array(loss)
+    plt.figure(figsize = figsize)
+    if plot_iters:
+        iters = np.arange(len(loss)) / n_epochs if n_epochs else np.arange(len(loss))
+        plt.plot(iters, loss)
+    if plot_epochs:
+        if n_epochs is None:
+            raise ValueError('Parameter `n_epochs` is not specified!')
+        loss_epochs = np.mean(np.split(loss, n_epochs), -1)
+        iters = np.arange(len(loss_epochs))
+        plt.plot(iters, loss_epochs)
+    plt.grid(grid)
+    plt.show()
