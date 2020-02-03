@@ -1,5 +1,9 @@
 """ Seismic batch tools """
+import csv
+import shutil
+import tempfile
 import functools
+
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
@@ -802,3 +806,43 @@ def check_unique_fieldrecord_across_surveys(surveys_by_fieldrecord, index):
     """
     if len(surveys_by_fieldrecord) != 1:
         raise ValueError('Field {} represents data from more than one survey!'.format(index))
+
+
+def transform_to_fixed_width_columns(path, path_save=None, n_spaces=8, max_len=(6, 4)):
+    """ Transforms the format of the csv file with dumped picking so all the columns are separated
+    by `n_spaces` spaces exactly. To make such transform possible you must provide the maximum number
+    of digits each column, except the last one, contains. In case, for example, traces are identified
+    by the 'FieldRecord' and 'TraceNumber' headers, and their maximum values are 999999 and 9999 respectively,
+    `max_len` is `(6, 4)`. Such transform makes it compatible with specific seismic processing software.
+
+
+    Parameters
+    ----------
+    path : str
+        Path to the file with picking.
+    path_save : str, optional
+        Path where the result would be stored. By default the file would be overwritten.
+    n_spaces : int, default is 8
+        The number of spaces separating columns.
+    max_len : tuple, default is (6, 4)
+        Width of each column except last one.
+    """
+    if path_save is not None:
+        write_object = open(path_save, 'w')
+    # in case you want to overwrite the existing file, temporary file would be created.
+    # the intermediate results would be saved to this temp file, in the end original file
+    # would be replaced with temporary one, afterwards temp file deleted
+    else:
+        write_object = tempfile.NamedTemporaryFile(mode='w', delete=True)
+
+    with open(path, 'r', newline='') as read_file:
+        reader = csv.reader(read_file)
+        with write_object as write_file:
+            for row in reader:
+                for i, item in enumerate(row[:-1]):
+                    write_file.write(str(item).ljust(max_len[i] + n_spaces))
+                write_file.write(str(row[-1]) + '\n')
+
+            if path_save:
+                return
+            shutil.copyfile(write_file.name, path)

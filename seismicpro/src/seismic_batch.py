@@ -4,20 +4,22 @@ from textwrap import dedent
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import signal
+from scipy.signal import hilbert
 import pywt
 import segyio
 
 from ..batchflow import action, inbatch_parallel, Batch, any_action_failed
 
-from .seismic_index import SegyFilesIndex, FieldIndex
+from .seismic_index import SegyFilesIndex, FieldIndex, KNNIndex, TraceIndex
 
 from .utils import (FILE_DEPENDEND_COLUMNS, partialmethod, calculate_sdc_for_field, massive_block,
                     check_unique_fieldrecord_across_surveys)
 from .file_utils import write_segy_file
 from .plot_utils import IndexTracker, spectrum_plot, seismic_plot, statistics_plot, gain_plot
 
+INDEX_UID = 'TRACE_SEQUENCE_FILE'
 
-PICKS_FILE_HEADERS = ['FieldRecord', 'TraceNumber', 'timeOffset']
+PICKS_FILE_HEADER = 'FIRST_BREAK_TIME'
 
 
 ACTIONS_DICT = {
@@ -170,53 +172,48 @@ class SeismicBatch(Batch):
         return self.indices
 
     def _post_filter_by_mask(self, mask, *args, **kwargs):
-        """Component filtration using the union of all the received masks.
+        """Index filtration using all received masks. This post function assumes that
+        components have already been filtered.
 
         Parameters
         ----------
         mask : list
-            List of masks if ``src`` is ``str``
-            or list of lists if ``src`` is list.
+            list of boolean arrays
 
         Returns
         -------
             : SeismicBatch
-            New batch class of filtered components.
+            New batch with new index.
 
         Note
         ----
-        All components will be changed with given mask and during the proccess,
-        new SeismicBatch instance will be created.
+        Batch items in each component should be filtered in decorated action.
+        This post function creates new instance of SeismicBatch with new index
+        instance and copies filtered components from original batch for elements
+        in new index.
         """
+        _ = args, kwargs
         if any_action_failed(mask):
             all_errors = [error for error in mask if isinstance(error, Exception)]
             print(all_errors)
             raise ValueError(all_errors)
 
-        _ = args
-        src = kwargs.get('src', None)
-        src = (src, ) if isinstance(src, str) else src
-
-        mask = np.concatenate((np.array(mask)))
-        new_idf = self.index.get_df(index=np.hstack((mask)), reset=False)
+        mask = np.concatenate(mask)
+        new_idf = self.index.get_df(index=mask, reset=False)
         new_index = new_idf.index.unique()
 
         batch_index = type(self.index).from_index(index=new_index, idf=new_idf,
                                                   index_name=self.index.name)
 
-        batch = type(self)(batch_index)
-        batch.add_components(self.components)
-        batch.meta = self.meta
+        new_batch = type(self)(batch_index)
+        new_batch.add_components(self.components, len(self.components) * [new_batch.array_of_nones])
+        new_batch.meta = self.meta
 
-        for comp in batch.components:
-            setattr(batch, comp, np.array([None] * len(batch.index)))
-
-        for i, index in enumerate(new_index):
-            for isrc in batch.components:
-                pos = self.get_pos(None, isrc, index)
-                new_data = getattr(self, isrc)[pos][mask[pos]]
-                getattr(batch, isrc)[i] = new_data
-        return batch
+        for isrc in new_batch.components:
+            pos_new = new_batch.get_pos(None, isrc, new_batch.indices)
+            pos_old = self.get_pos(None, isrc, new_batch.indices)
+            getattr(new_batch, isrc)[pos_new] = getattr(self, isrc)[pos_old]
+        return new_batch
 
     def trace_headers(self, header, flatten=False):
         """Get trace heades.
@@ -448,7 +445,7 @@ class SeismicBatch(Batch):
         return self
 
     @action
-    def _dump_picking(self, src, path, traces, to_samples, columns=None):
+    def _dump_picking(self, src, path, src_traces, input_units='samples', columns=('FieldRecord', 'TraceNumber')):
         """Dump picking to file.
 
         Parameters
@@ -457,38 +454,41 @@ class SeismicBatch(Batch):
             Source to get picking from.
         path : str
             Output file path.
-        traces : str
+        src_traces : str
             Batch component with corresponding traces.
-        to_samples : bool
-            Should be picks converted to time samples.
-        columns: array_like, optional
-            Columns to include in the output file. See PICKS_FILE_HEADERS for default format.
+        input_units : str
+            Units in which picking is stored in src. Must be one of the 'samples' or 'milliseconds'.
+            In case 'milliseconds' dumped as is. Otherwise converted to milliseconds first.
+        columns: array_like
+            Columns to include in the output file.
+            In case `PICKS_FILE_HEADER` not included it will be added automatically.
 
         Returns
         -------
         batch : SeismicBatch
             Batch unchanged.
         """
-        data = getattr(self, src).astype(int)
-        if to_samples:
-            data = self.meta[traces]['samples'][data]
+        data = getattr(self, src)
+        if input_units == 'samples':
+            data = data.astype(int)
+            data = self.meta[src_traces]['samples'][data]
 
-        if columns is None:
-            columns = PICKS_FILE_HEADERS
+        if PICKS_FILE_HEADER not in columns:
+            columns = columns + (PICKS_FILE_HEADER, )
 
         df = self.index.get_df(reset=False)
-        sort_by = self.meta[traces]['sorting']
+        sort_by = self.meta.get(src, {}).get('sorting')
         if sort_by is not None:
             df = df.sort_values(by=sort_by)
 
         df = df.loc[self.indices]
-        df['timeOffset'] = data.astype(int)
-        df = df.reset_index(drop=self.index.name is None)[columns]
+        df = df.reset_index(drop=self.index.name is None)[list(columns)]
         df.columns = df.columns.droplevel(1)
 
-        for i in [0, 2, 4]:
-            df.insert(i, str(i), "")
-        df.to_csv(path, index=False, sep='\t', header=False, encoding='ascii', mode='a')
+        if not os.path.isfile(path):
+            df.to_csv(path, index=False, header=True, mode='a')
+        else:
+            df.to_csv(path, index=False, header=None, mode='a')
         return self
 
     @action
@@ -519,11 +519,12 @@ class SeismicBatch(Batch):
         return super().load(src=src, fmt=fmt, components=components, **kwargs)
 
     def _load_picking(self, components):
-        """Load picking from file."""
+        """Load picking from dataframe column."""
         idf = self.index.get_df(reset=False)
-        res = np.split(idf.FIRST_BREAK_TIME.values,
-                       np.cumsum(self.index.tracecounts))[:-1]
-        self.add_components(components, init=res)
+        ind = np.cumsum(self.index.tracecounts)[:-1]
+        dst_data = np.split(idf[PICKS_FILE_HEADER].values, ind)
+        self.add_components(components, init=np.array(dst_data + [None])[:-1])
+        self.meta.update({components:dict(sorting=None)})
         return self
 
     @apply_to_each_component
@@ -569,11 +570,13 @@ class SeismicBatch(Batch):
         _ = src, args
         pos = self.get_pos(None, "indices", index)
         path = index
-        trace_seq = self.index.get_df([index])[('TRACE_SEQUENCE_FILE', src)]
+        trace_seq = self.index.get_df([index])[(INDEX_UID, src)]
         if tslice is None:
             tslice = slice(None)
 
-        with segyio.open(path, strict=False) as segyfile:
+        # Infering cube geometry may be time consuming for some `segy` files.
+        # Set `ignore_geometry = True` to skip this stage when opening `segy` file.
+        with segyio.open(path, strict=False, ignore_geometry=True) as segyfile:
             traces = np.atleast_2d([segyfile.trace[i - 1][tslice] for i in
                                     np.atleast_1d(trace_seq).astype(int)])
             samples = segyfile.samples[tslice]
@@ -646,10 +649,9 @@ class SeismicBatch(Batch):
         getattr(self, dst)[pos] = np.pad(data, **kwargs)
         return self
 
-    @action
     @inbatch_parallel(init="_init_component", target="threads")
     @apply_to_each_component
-    def sort_traces(self, index, *args, src, sort_by, dst=None):
+    def _sort(self, index, src, sort_by, current_sorting, dst=None):
         """Sort traces.
 
         Parameters
@@ -658,7 +660,40 @@ class SeismicBatch(Batch):
             The batch components to get the data from.
         dst : str, array-like
             The batch components to put the result in.
-        sort_by: str
+        sort_by : str
+            Sorting key.
+        current_sorting : str
+            Current sorting of `src` component
+
+        Returns
+        -------
+        batch : SeismicBatch
+            Batch with new trace sorting.
+        """
+        pos = self.get_pos(None, src, index)
+        df = self.index.get_df([index])
+
+        if current_sorting:
+            cols = [current_sorting, sort_by]
+            sorted_index_df = df[cols].sort_values(current_sorting)
+            order = np.argsort(sorted_index_df[sort_by].values, kind='stable')
+        else:
+            order = np.argsort(df[sort_by].values, kind='stable')
+
+        getattr(self, dst)[pos] = getattr(self, src)[pos][order]
+        return self
+
+    @action
+    def sort_traces(self, *args, src, sort_by, dst):
+        """Sort traces.
+
+        Parameters
+        ----------
+        src : str, array-like
+            The batch components to get the data from.
+        dst : str, array-like
+            The batch components to put the result in.
+        sort_by : str
             Sorting key.
 
         Returns
@@ -667,40 +702,89 @@ class SeismicBatch(Batch):
             Batch with new trace sorting.
         """
         _ = args
-        pos = self.get_pos(None, src, index)
-        df = self.index.get_df([index])
-        order = np.argsort(df[sort_by].tolist())
-        getattr(self, dst)[pos] = getattr(self, src)[pos][order]
-        if pos == 0:
-            self.meta[dst]['sorting'] = sort_by
+        if src in self.meta.keys():
+            current_sorting = self.meta[src].get('sorting')
+        else:
+            current_sorting = None
+
+        if current_sorting == sort_by:
+            return self
+
+        self._sort(src=src, sort_by=sort_by, current_sorting=current_sorting, dst=dst)
+        self.meta[dst]['sorting'] = sort_by
 
         return self
 
     @action
     @inbatch_parallel(init="indices", post='_post_filter_by_mask', target="threads")
-    @apply_to_each_component
-    def drop_zero_traces(self, index, src, num_zero, **kwargs):
+    def drop_zero_traces(self, index, src, num_zero, all_comps_sorted=True, **kwargs):
         """Drop traces with sequence of zeros longer than ```num_zero```.
+
+        This action drops traces from index dataframe and from all batch components
+        according to the mask calculated on `src` component.
 
         Parameters
         ----------
         num_zero : int
-            Size of the sequence of zeros.
+            All traces that contain more than `num_zero` consecutive zeros will be removed.
         src : str, array-like
             The batch components to get the data from.
+        all_comps_sorted : bool
+            Check that all components have the same sorting to ensure that they are
+            modified in a same way.
 
         Returns
         -------
             : SeismicBatch
             Batch without dropped traces.
+
+        Raises
+        ------
+        ValueError : if `src` has no sorting and batch index is FieldIndex.
+        ValueError : if `all_comps_sorted` is True and any component in batch has
+                     sorting different from `src`.
+
+        Note
+        ----
+        This action creates new instance of SeismicBatch with new index
+        instance.
         """
         _ = kwargs
+        sorting = self.meta[src]['sorting']
+        if sorting is None and not isinstance(self.index, TraceIndex):
+            raise ValueError('traces in `{}` component should be sorted '
+                             'before dropping zero traces'.format(src))
+
+        if all_comps_sorted:
+            has_same_sorting = all(self.meta[comp]['sorting'] == sorting for comp in self.components)
+            if not has_same_sorting:
+                raise ValueError('all components in batch should have same sorting')
+
         pos = self.get_pos(None, src, index)
         traces = getattr(self, src)[pos]
         mask = list()
-        for _, trace in enumerate(traces != 0):
-            diff_zeros = np.diff(np.append(np.where(trace)[0], len(trace)))
-            mask.append(False if len(diff_zeros) == 0 else np.max(diff_zeros) < num_zero)
+        for trace in traces:
+            nonzero_indices = np.flatnonzero(trace)
+            # add -1 and len(trace) indices to count leading and trailing zero sequences
+            nonzero_indices = np.concatenate(([-1], nonzero_indices, [len(trace)]))
+            zero_seqs = np.diff(nonzero_indices) - 1
+            mask.append(np.max(zero_seqs) < num_zero)
+        mask = np.array(mask)
+
+        for comp in self.components:
+            getattr(self, comp)[pos] = getattr(self, comp)[pos][mask]
+
+        if sorting:
+            cols = [(INDEX_UID, src), (sorting, '')]
+            index_df = self.index.get_df([index])
+            if cols[0] not in index_df.columns:
+                # Level 1 of MultiIndex contains name of common columns ('') at first position and names of
+                # all columns that relate to specific sgy files.
+                raise ValueError('`src` should be one of the component names that Index was created with: {}'
+                                 ''.format(index_df.columns.levels[1][1:].values))
+            sorted_index_df = index_df[cols].sort_values(sorting)
+            order = np.argsort(sorted_index_df[cols[0]].values, kind='stable')
+            return mask[order]
         return mask
 
     @action
@@ -1054,11 +1138,11 @@ class SeismicBatch(Batch):
         ind = np.cumsum(traces_in_item)[:-1]
 
         dst_data = np.split(std_data, ind)
-        setattr(self, dst, np.array([i for i in dst_data] + [None])[:-1])
+        setattr(self, dst, np.array(dst_data + [None])[:-1]) # array implicitly converted to object dtype
         return self
 
     @action
-    def picking_to_mask(self, src, dst, src_traces='raw'):
+    def picking_to_mask(self, src, dst, src_traces):
         """Convert picking time to the mask for TraceIndex.
 
         Parameters
@@ -1078,8 +1162,8 @@ class SeismicBatch(Batch):
         data = np.concatenate(getattr(self, src))
 
         samples = self.meta[src_traces]['samples']
-        tick = samples[1] - samples[0]
-        data = np.around(data / tick).astype('int')
+        rate = samples[1] - samples[0]
+        data = np.around(data / rate).astype('int')
 
         batch_size = data.shape[0]
         trace_length = getattr(self, src_traces)[0].shape[1]
@@ -1121,7 +1205,7 @@ class SeismicBatch(Batch):
             data = np.argmax(data, axis=1)
 
         dst_data = massive_block(data)
-        setattr(self, dst, np.array([i for i in dst_data] + [None])[:-1])
+        setattr(self, dst, np.array(dst_data + [None])[:-1]) # array implicitly converted to object dtype
         return self
 
     @action
@@ -1150,7 +1234,7 @@ class SeismicBatch(Batch):
         long_win, lead_win = energy, energy
         lead_win[:, length_win:] = lead_win[:, length_win:] - lead_win[:, :-length_win]
         energy = lead_win / (long_win + eps)
-        self.add_components(dst, init=np.array([i for i in energy] + [None])[:-1])
+        self.add_components(dst, init=np.array(energy + [None])[:-1]) # array implicitly converted to object dtype
         return self
 
     @action
@@ -1173,7 +1257,7 @@ class SeismicBatch(Batch):
         energy = np.stack(getattr(self, src))
         energy = np.gradient(energy, axis=1)
         picking = np.argmax(energy, axis=1)
-        self.add_components(dst, np.array([i for i in picking] + [None])[:-1])
+        self.add_components(dst, np.array(picking + [None])[:-1]) # array implicitly converted to object dtype
         return self
 
     @action
@@ -1250,4 +1334,46 @@ class SeismicBatch(Batch):
         equalized_field = field / p_95
 
         getattr(self, dst)[pos] = equalized_field
+        return self
+
+    @action
+    @inbatch_parallel(init='_init_component', target="threads")
+    def shift_pick_phase(self, index, src, src_traces, dst=None, shift=1.5, threshold=0.05):
+        """ Shifts picking time stored in `src` component on the given phase along the traces stored in `src_traces`.
+
+        Parameters
+        ----------
+        src : str
+            The batch component to get picking from.
+        dst : str
+            The batch component to put the result in.
+        src_traces: str
+            The batch component where the traces are stored.
+        shift: float
+            The amount of phase to shift measured in radians. Default is 1.5 , which corresponds
+            to transfering the picking times from 'max' to 'zero' type.
+        threshold: float
+            Threshold determining amplitude, such that all the samples with amplitude less then threshold would be
+            skipped. Introduced because of unstable behaviour of the hilbert transform at the begining of the signal.
+
+         """
+        shift *= np.pi
+        pos = self.get_pos(None, src, index)
+        pick = getattr(self, src)[pos]
+        trace = getattr(self, src_traces)[pos]
+        if isinstance(self.index, KNNIndex):
+            trace = trace[0]
+        trace = np.squeeze(trace)
+
+        analytic = hilbert(trace)
+        phase = np.unwrap(np.angle(analytic))
+        # finding x such that phase[x] = phase[pick] - shift
+        phase_mod = phase - (phase[pick] - shift)
+        phase_mod[phase_mod < 0] = 0
+        # in case phase_mod reaches 0 multiple times find the index of last one
+        x = len(phase_mod) - phase_mod[::-1].argmin() - 1
+        # skip the trace samples with amplitudes < threshold, starting from the `zero` sample
+        n_skip = max((np.abs(trace[x:]) > threshold).argmax() - 1, 0)
+        x += n_skip
+        getattr(self, dst)[pos] = x
         return self
