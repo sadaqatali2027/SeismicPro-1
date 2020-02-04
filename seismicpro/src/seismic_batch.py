@@ -677,9 +677,9 @@ class SeismicBatch(Batch):
         if current_sorting:
             cols = [current_sorting, sort_by]
             sorted_index_df = df[cols].sort_values(current_sorting)
-            order = np.argsort(sorted_index_df[sort_by].values)
+            order = np.argsort(sorted_index_df[sort_by].values, kind='stable')
         else:
-            order = np.argsort(df[sort_by].values)
+            order = np.argsort(df[sort_by].values, kind='stable')
 
         getattr(self, dst)[pos] = getattr(self, src)[pos][order]
         return self
@@ -784,7 +784,7 @@ class SeismicBatch(Batch):
                 raise ValueError('`src` should be one of the component names that Index was created with: {}'
                                  ''.format(index_df.columns.levels[1][1:].values))
             sorted_index_df = index_df[cols].sort_values(sorting)
-            order = np.argsort(sorted_index_df[cols[0]].values)
+            order = np.argsort(sorted_index_df[cols[0]].values, kind='stable')
             return mask[order]
         return mask
 
