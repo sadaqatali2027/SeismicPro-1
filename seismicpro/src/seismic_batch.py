@@ -652,6 +652,7 @@ class SeismicBatch(Batch):
         return self
 
     @inbatch_parallel(init="_init_component", target="threads")
+    @apply_to_each_component
     def _sort(self, index, src, sort_by, current_sorting, dst=None):
         """Sort traces.
 
