@@ -20,6 +20,7 @@ from .plot_utils import IndexTracker, spectrum_plot, seismic_plot, statistics_pl
 INDEX_UID = 'TRACE_SEQUENCE_FILE'
 
 PICKS_FILE_HEADER = 'FIRST_BREAK_TIME'
+GEOM_CHECK_HEADER = 'CORRECT_GEOM'
 
 
 ACTIONS_DICT = {
@@ -378,6 +379,8 @@ class SeismicBatch(Batch):
             return self._dump_segy(src, path, **kwargs)
         if fmt == 'picks':
             return self._dump_picking(src, path, **kwargs)
+        if fmt == 'geom':
+            return self._dump_geometry_flags(src, path, **kwargs)
         raise NotImplementedError('Unknown format.')
 
     @action
@@ -470,22 +473,51 @@ class SeismicBatch(Batch):
         batch : SeismicBatch
             Batch unchanged.
         """
+        if not isinstance(self.index, TraceIndex):
+            raise ValueError('Picking dump works with TraceIndex only')
         data = getattr(self, src)
         if input_units == 'samples':
             data = data.astype(int)
             data = self.meta[src_traces]['samples'][data]
 
-        if PICKS_FILE_HEADER not in columns:
-            columns = columns + (PICKS_FILE_HEADER, )
-
-        df = self.index.get_df(reset=False)
-        sort_by = self.meta.get(src, {}).get('sorting')
-        if sort_by is not None:
-            df = df.sort_values(by=sort_by)
-
-        df = df.loc[self.indices]
-        df = df.reset_index(drop=self.index.name is None)[list(columns)]
+        df = self.index.get_df()[list(columns)]
         df.columns = df.columns.droplevel(1)
+
+        df[PICKS_FILE_HEADER] = data
+
+        if not os.path.isfile(path):
+            df.to_csv(path, index=False, header=True, mode='a')
+        else:
+            df.to_csv(path, index=False, header=None, mode='a')
+        return self
+
+    @action
+    def _dump_geometry_flags(self, src, path, columns=('FieldRecord',)):
+        """Dump results of check for geometry assignment correctness to file.
+
+        Parameters
+        ----------
+        src : str
+            Source to get flags from.
+        path : str
+            Output file path.
+        columns: array_like
+            Columns to include in the output file.
+            In case `CORRECT_GEOM` not included it will be added automatically.
+
+        Returns
+        -------
+        batch : SeismicBatch
+            Batch unchanged.
+        """
+        if not isinstance(self.index, FieldIndex):
+            raise ValueError('Geometry check dump works with FieldIndex only')
+        data = getattr(self, src)
+
+        df = self.index.get_df(reset=True)[list(columns)].drop_duplicates()
+        df.columns = df.columns.droplevel(1)
+
+        df[GEOM_CHECK_HEADER] = data
 
         if not os.path.isfile(path):
             df.to_csv(path, index=False, header=True, mode='a')
@@ -516,17 +548,20 @@ class SeismicBatch(Batch):
         if fmt.lower() in ['sgy', 'segy']:
             return self._load_segy(src=components, dst=components, **kwargs)
         if fmt == 'picks':
-            return self._load_picking(components=components)
+            return self._load_from_index(src=PICKS_FILE_HEADER, dst=components)
+        if fmt == 'index':
+            return self._load_from_index(src=src, dst=components)
 
         return super().load(src=src, fmt=fmt, components=components, **kwargs)
 
-    def _load_picking(self, components):
+    @apply_to_each_component
+    def _load_from_index(self, src, dst):
         """Load picking from dataframe column."""
         idf = self.index.get_df(reset=False)
         ind = np.cumsum(self.index.tracecounts)[:-1]
-        dst_data = np.split(idf[PICKS_FILE_HEADER].values, ind)
-        self.add_components(components, init=np.array(dst_data + [None])[:-1])
-        self.meta.update({components:dict(sorting=None)})
+        dst_data = np.split(idf[src].values, ind)
+        self.add_components(dst, init=np.array(dst_data + [None])[:-1])
+        self.meta.update({dst:dict(sorting=None)})
         return self
 
     @apply_to_each_component
@@ -652,7 +687,6 @@ class SeismicBatch(Batch):
         return self
 
     @inbatch_parallel(init="_init_component", target="threads")
-    @apply_to_each_component
     def _sort(self, index, src, sort_by, current_sorting, dst=None):
         """Sort traces.
 
@@ -686,7 +720,8 @@ class SeismicBatch(Batch):
         return self
 
     @action
-    def sort_traces(self, *args, src, sort_by, dst):
+    @apply_to_each_component
+    def sort_traces(self, *args, src, sort_by, dst=None):
         """Sort traces.
 
         Parameters
