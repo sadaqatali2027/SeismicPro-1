@@ -16,7 +16,6 @@ from .utils import (FILE_DEPENDEND_COLUMNS, partialmethod, calculate_sdc_for_fie
                     check_unique_fieldrecord_across_surveys)
 from .file_utils import write_segy_file
 from .plot_utils import IndexTracker, spectrum_plot, seismic_plot, statistics_plot, gain_plot
-from .seismic_batch_tools import _crop
 
 INDEX_UID = 'TRACE_SEQUENCE_FILE'
 
@@ -1337,6 +1336,32 @@ class SeismicBatch(Batch):
         getattr(self, dst)[pos] = equalized_field
         return self
 
+    def _crop(self, image, coords, shape):
+        """ Perform crops from the image.
+        Number of crops is defined by the number of elements in `coords` parameter.
+
+        Parameters
+        ----------
+        image : np.array
+            Image to crop from.
+        coords: list of tuples
+            The list of top-left (x,y) coordinates for each crop.
+        shape: tuple of ints
+            Crop shape.
+
+        Returns
+        -------
+        res: np.array, dtype='O'
+            Array with crops.
+        """
+        res = np.empty((len(coords), ), dtype='O')
+        for i, (x, y) in enumerate(coords):
+            if (x + shape[0] > image.shape[0]) or (y + shape[1] > image.shape[1]):
+                print(x, y, shape, image.shape)
+                raise ValueError('Resulting crop shape is less than expected.')
+            res[i] = image[x:x+shape[0], y:y+shape[1]]
+        return res
+
     @action
     @inbatch_parallel(init='_init_component')
     def random_crop(self, index, src, num_crops, shape, dst=None):
@@ -1389,10 +1414,9 @@ class SeismicBatch(Batch):
 
         for isrc, idst in zip(src, dst):
             field = getattr(self, isrc)[pos]
-            getattr(self, idst)[pos] = _crop(field, xy, shape)
+            getattr(self, idst)[pos] = self._crop(field, xy, shape)
 
         return self
-
 
     @action
     @inbatch_parallel(init='_init_component')
@@ -1442,7 +1466,7 @@ class SeismicBatch(Batch):
             raise ValueError('Coords not specified correctly')
 
         field = getattr(self, src)[pos]
-        getattr(self, dst)[pos] = _crop(field, xy, shape)
+        getattr(self, dst)[pos] = self._crop(field, xy, shape)
 
     @inbatch_parallel(init='_init_component', target="threads")
     def shift_pick_phase(self, index, src, src_traces, dst=None, shift=1.5, threshold=0.05):
