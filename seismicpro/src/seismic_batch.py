@@ -1357,66 +1357,9 @@ class SeismicBatch(Batch):
         res = np.empty((len(coords), ), dtype='O')
         for i, (x, y) in enumerate(coords):
             if (x + shape[0] > image.shape[0]) or (y + shape[1] > image.shape[1]):
-                print(x, y, shape, image.shape)
-                raise ValueError('Resulting crop shape is less than expected.')
+                raise ValueError(f'Coordinates {(x,y)} exceed feasible region of {image.shape}-{shape}')
             res[i] = image[x:x+shape[0], y:y+shape[1]]
         return res
-
-    @action
-    @inbatch_parallel(init='_init_component')
-    def random_crop(self, index, src, num_crops, shape, dst=None):
-        """ Random crop from seismograms.
-
-        Parameters
-        ----------
-        src : str, array-like
-            The batch components to get the data from.
-        dst : str, array-like
-            The batch components to put the result in.
-        num_crops: int
-            Number of random crops.
-        shape: tuple of ints
-            Crop shape.
-
-        Notes
-        -----
-        - Works properly only with FieldIndex.
-
-        Examples
-        --------
-
-        ::
-
-            crop(src='raw', dst='raw_crop', num_crops=10, shape=(10, 10))
-        """
-        if not isinstance(self.index, FieldIndex):
-            raise NotImplementedError("Index must be FieldIndex, not {}".format(type(self.index)))
-
-        if isinstance(src, str):
-            src = (src, )
-        if dst is None:
-            dst = src
-        elif isinstance(dst, str):
-            dst = (dst, )
-
-        pos = self.get_pos(None, None, index)
-
-        # Sample coords
-        if isinstance(num_crops, int) and num_crops > 0:
-            field = getattr(self, src[0])[pos]
-            if (field.shape[0] < shape[0]) or (field.shape[1] < shape[1]):
-                raise ValueError('Field shape {0} is less then crop shape {1}'. format(field.shape, shape))
-            x = np.random.randint(field.shape[0] - shape[0] + 1, size=num_crops)
-            y = np.random.randint(field.shape[1] - shape[1] + 1, size=num_crops)
-            xy = list(zip(x, y))
-        else:
-            raise ValueError('num_crops must be positive integer, got', num_crops)
-
-        for isrc, idst in zip(src, dst):
-            field = getattr(self, isrc)[pos]
-            getattr(self, idst)[pos] = self._crop(field, xy, shape)
-
-        return self
 
     @action
     @inbatch_parallel(init='_init_component')
@@ -1430,17 +1373,33 @@ class SeismicBatch(Batch):
             The batch components to get the data from.
         dst : str, array-like
             The batch components to put the result in.
-        coords: list, list of lists
-            The list of top-left (x,y) coordinates for each crop.
+        coords: list, NamedExpression
+            The list with tuples (x,y) of top-left coordinates for each crop.
                 - if `coords` is the list then crops from the same coords for each item in the batch.
-                - if `coords` is the list of lists then crops from individual coords for each item in the batch.
-                  In this case condition `len(coords) == len(batch)` must be satisfied.
+                - if `coords` is an `R` NamedExpression it should return values in [0, 1) with shape
+                  (num_crops, 2). Same coords will be sampled for each item in the batch.
+                - if `coords` is the list of lists wrapped in `P` NamedExpression and len(coords) equals
+                  to batch size, then crops from individual coords for each item in the batch.
+                - if `coords` is `P(R(..))` NamedExpression, `R` should return values in [0, 1) with shape
+                  (num_crops, 2) and different coords will be sampled for each batch item.
         shape: tuple of ints
             Crop shape.
+
+        Returns
+        -------
+            : SeismicBatch
+            Batch with crops. `dst` components are now arrays (of size batch items) of arrays (number of crops)
+            of arrays (crop shape).
+
+        Raises
+        ------
+        ValueError : if shape is larger than seismogram in any dimension.
+        ValueError : if coord + shape is larger than seismogram in any dimension.
 
         Notes
         -----
         - Works properly only with FieldIndex.
+        - `R` samples a relative position of top-left coordinate in a feasible region of seismogram.
 
         Examples
         --------
@@ -1448,24 +1407,25 @@ class SeismicBatch(Batch):
         ::
 
             crop(src=['raw', 'mask], dst=['raw_crop', 'mask_crop], coords=[[0, 0], [1, 1]], shape=(100, 256))
-            crop(src=['raw', 'mask], dst=['raw_crop', 'mask_crop], shape=(100, 256)
-                coords=[[[0, 0]], [[0, 0], [2, 2]]]).next_batch(2)
+            crop(src=['raw', 'mask], dst=['raw_crop', 'mask_crop], shape=(100, 256),
+                coords=P([[[0, 0]], [[0, 0], [2, 2]]])).next_batch(2)
+            crop(src=['raw', 'mask], dst=['raw_crop', 'mask_crop], shape=(100, 256),
+                coords=P(R('uniform', size=(N_RANDOM_CROPS, 2)))).next_batch(2)
         """
-
         if not isinstance(self.index, FieldIndex):
             raise NotImplementedError("Index must be FieldIndex, not {}".format(type(self.index)))
 
         pos = self.get_pos(None, None, index)
-
-        xy = None
-        if isinstance(coords, (list, tuple)) and isinstance(coords[0], (list, tuple)): # crop the same coords
-            xy = coords
-            if isinstance(coords[0][0], (list, tuple)) and (len(coords) == len(self)): # crop individual coords
-                xy = coords[pos]
-        if xy is None:
-            raise ValueError('Coords not specified correctly')
-
         field = getattr(self, src)[pos]
+
+        if all(((0 < x < 1) and (0 < y < 1)) for x, y in coords):
+            feasible_region = np.array(field.shape) - shape
+            xy = (feasible_region * coords).astype(int)
+            if np.any(xy < 0):
+                raise ValueError("`shape` is larger than one of seismogram's dimensions")
+        else:
+            xy = np.array(coords)
+
         getattr(self, dst)[pos] = self._crop(field, xy, shape)
 
     @inbatch_parallel(init='_init_component', target="threads")
