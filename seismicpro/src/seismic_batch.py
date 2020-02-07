@@ -1357,7 +1357,8 @@ class SeismicBatch(Batch):
         res = np.empty((len(coords), ), dtype='O')
         for i, (x, y) in enumerate(coords):
             if (x + shape[0] > image.shape[0]) or (y + shape[1] > image.shape[1]):
-                raise ValueError(f'Coordinates {(x,y)} exceed feasible region of {image.shape}-{shape}')
+                raise ValueError('Coordinates', (x, y), 'exceed feasible region of seismogramm shape: ', image.shape,
+                                 'with crop shape: ', shape)
             res[i] = image[x:x+shape[0], y:y+shape[1]]
         return res
 
