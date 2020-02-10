@@ -1394,7 +1394,99 @@ class SeismicBatch(Batch):
         getattr(self, dst)[pos] = equalized_field
         return self
 
+    def _crop(self, image, coords, shape):
+        """ Perform crops from the image.
+        Number of crops is defined by the number of elements in `coords` parameter.
+
+        Parameters
+        ----------
+        image : np.array
+            Image to crop from.
+        coords: list of tuples
+            The list of top-left (x,y) coordinates for each crop.
+        shape: tuple of ints
+            Crop shape.
+
+        Returns
+        -------
+        res: np.array, dtype='O'
+            Array with crops.
+        """
+        res = np.empty((len(coords), ), dtype='O')
+        for i, (x, y) in enumerate(coords):
+            if (x + shape[0] > image.shape[0]) or (y + shape[1] > image.shape[1]):
+                raise ValueError('Coordinates', (x, y), 'exceed feasible region of seismogramm shape: ', image.shape,
+                                 'with crop shape: ', shape)
+            res[i] = image[x:x+shape[0], y:y+shape[1]]
+        return res
+
     @action
+    @inbatch_parallel(init='_init_component')
+    @apply_to_each_component
+    def crop(self, index, src, coords, shape, dst=None):
+        """ Crop from seismograms by given coordinates.
+
+        Parameters
+        ----------
+        src : str, array-like
+            The batch components to get the data from.
+        dst : str, array-like
+            The batch components to put the result in.
+        coords: list, NamedExpression
+            The list with tuples (x,y) of top-left coordinates for each crop.
+                - if `coords` is the list then crops from the same coords for each item in the batch.
+                - if `coords` is an `R` NamedExpression it should return values in [0, 1) with shape
+                  (num_crops, 2). Same coords will be sampled for each item in the batch.
+                - if `coords` is the list of lists wrapped in `P` NamedExpression and len(coords) equals
+                  to batch size, then crops from individual coords for each item in the batch.
+                - if `coords` is `P(R(..))` NamedExpression, `R` should return values in [0, 1) with shape
+                  (num_crops, 2) and different coords will be sampled for each batch item.
+        shape: tuple of ints
+            Crop shape.
+
+        Returns
+        -------
+            : SeismicBatch
+            Batch with crops. `dst` components are now arrays (of size batch items) of arrays (number of crops)
+            of arrays (crop shape).
+
+        Raises
+        ------
+        ValueError : if shape is larger than seismogram in any dimension.
+        ValueError : if coord + shape is larger than seismogram in any dimension.
+
+        Notes
+        -----
+        - Works properly only with FieldIndex.
+        - `R` samples a relative position of top-left coordinate in a feasible region of seismogram.
+
+        Examples
+        --------
+
+        ::
+
+            crop(src=['raw', 'mask], dst=['raw_crop', 'mask_crop], coords=[[0, 0], [1, 1]], shape=(100, 256))
+            crop(src=['raw', 'mask], dst=['raw_crop', 'mask_crop], shape=(100, 256),
+                coords=P([[[0, 0]], [[0, 0], [2, 2]]])).next_batch(2)
+            crop(src=['raw', 'mask], dst=['raw_crop', 'mask_crop], shape=(100, 256),
+                coords=P(R('uniform', size=(N_RANDOM_CROPS, 2)))).next_batch(2)
+        """
+        if not isinstance(self.index, FieldIndex):
+            raise NotImplementedError("Index must be FieldIndex, not {}".format(type(self.index)))
+
+        pos = self.get_pos(None, None, index)
+        field = getattr(self, src)[pos]
+
+        if all(((0 < x < 1) and (0 < y < 1)) for x, y in coords):
+            feasible_region = np.array(field.shape) - shape
+            xy = (feasible_region * coords).astype(int)
+            if np.any(xy < 0):
+                raise ValueError("`shape` is larger than one of seismogram's dimensions")
+        else:
+            xy = np.array(coords)
+
+        getattr(self, dst)[pos] = self._crop(field, xy, shape)
+
     @inbatch_parallel(init='_init_component', target="threads")
     def shift_pick_phase(self, index, src, src_traces, dst=None, shift=1.5, threshold=0.05):
         """ Shifts picking time stored in `src` component on the given phase along the traces stored in `src_traces`.
