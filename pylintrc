@@ -8,7 +8,6 @@ max-line-length=120
 max-attributes=8
 max-args=10
 max-locals=25
-good-names = ix, ax, df, fs, im, lc, rc, xc, xy, yc
 variable-rgx=([a-z][a-z0-9_]{1,30}|[a-z_])$ # snake_case + single letters
 argument-rgx=([a-z][a-z0-9_]{1,30}|[a-z_])$ # snake_case + single letters
 
