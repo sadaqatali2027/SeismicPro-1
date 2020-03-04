@@ -345,14 +345,14 @@ def make_1d_bin_index(dfr, dfs, dfx, bin_size, origin=None, phi=None,
         if phi is None:
             if np.std(pts[:, 0]) > np.std(pts[:, 1]):
                 reg = LinearRegression().fit(pts[:, :1], pts[:, 1])
-                _phi = np.arctan(reg.coef_)[0]
+                phi_ = np.arctan(reg.coef_)[0]
             else:
                 reg = LinearRegression().fit(pts[:, 1:], pts[:, 0])
-                _phi = np.arctan(1. / reg.coef_)[0]
+                phi_ = np.arctan(1. / reg.coef_)[0]
         else:
-            _phi = np.radians(phi[rline]) # pylint: disable=assignment-from-no-return
+            phi_ = np.radians(phi[rline]) # pylint: disable=assignment-from-no-return
 
-        pts = rotate_2d(pts, -_phi)
+        pts = rotate_2d(pts, - phi_)
         ppx, y = pts[:, 0], np.mean(pts[:, 1])
 
         if origin is None:
@@ -364,10 +364,10 @@ def make_1d_bin_index(dfr, dfs, dfx, bin_size, origin=None, phi=None,
                 raise ValueError('Unknown grid optimizer.')
 
             s = shift + bin_size * ((np.min(ppx) - shift) // bin_size)
-            _origin = rotate_2d(np.array([[s, y]]), _phi)[0]
+            origin_ = rotate_2d(np.array([[s, y]]), phi_)[0]
         else:
-            _origin = origin[rline]
-            s = rotate_2d(_origin.reshape((-1, 2)), -_phi)[0, 0]
+            origin_ = origin[rline]
+            s = rotate_2d(origin_.reshape((-1, 2)), - phi_)[0, 0]
 
         t = np.max(ppx)
         bins = np.arange(s, t + bin_size, bin_size)
@@ -375,8 +375,8 @@ def make_1d_bin_index(dfr, dfs, dfx, bin_size, origin=None, phi=None,
         index = np.digitize(ppx, bins)
 
         dfm.loc[dfm['rline'] == rline, 'x_index'] = index
-        meta.update({rline: dict(origin=_origin,
-                                 phi=np.rad2deg(_phi),
+        meta.update({rline: dict(origin=origin_,
+                                 phi=np.rad2deg(phi_),
                                  bin_size=bin_size)})
 
     dfm['bin_id'] = (dfm['rline'].astype(str) + '/' + dfm['x_index'].astype(str)).values

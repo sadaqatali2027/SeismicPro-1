@@ -8,7 +8,7 @@ from .utils import measure_gain_amplitude
 class IndexTracker:
     """Provides onscroll and update methods for matplotlib scroll_event."""
     def __init__(self, ax, frames, frame_names, scroll_step=1, **kwargs):
-        self.ax = ax
+        self._ax = ax
         self.frames = frames
         self.step = scroll_step
         self.frame_names = frame_names
@@ -27,21 +27,21 @@ class IndexTracker:
 
     def update(self):
         """Update method."""
-        self.ax.clear()
+        self._ax.clear()
         img = self.frames[self.ind]
         img = np.squeeze(img)
         if img.ndim == 2:
-            self.ax.imshow(img.T, **self.img_kwargs)
+            self._ax.imshow(img.T, **self.img_kwargs)
         elif img.ndim == 1:
-            self.ax.plot(img.T, **self.img_kwargs)
+            self._ax.plot(img.T, **self.img_kwargs)
         else:
             raise ValueError('Invalid ndim to plot data.')
 
-        self.ax.set_title('%s' % self.frame_names[self.ind])
-        self.ax.set_aspect('auto')
+        self._ax.set_title('%s' % self.frame_names[self.ind])
+        self._ax.set_aspect('auto')
         if img.ndim == 2:
-            self.ax.set_ylim([img.shape[1], 0])
-            self.ax.set_xlim([0, img.shape[0]])
+            self._ax.set_ylim([img.shape[1], 0])
+            self._ax.set_xlim([0, img.shape[0]])
 
 def seismic_plot(arrs, wiggle=False, xlim=None, ylim=None, std=1, # pylint: disable=too-many-branches, too-many-arguments
                  pts=None, s=None, scatter_color=None, names=None, figsize=None,
