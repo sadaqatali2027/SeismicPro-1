@@ -183,6 +183,34 @@ class TraceIndex(DatasetIndex):
         indices = df.index.unique().sort_values()
         return type(self).from_index(index=indices, idf=df, index_name=self.name)
 
+    def concat(self, other):
+        """ Concatenate vertically current and `other` indices DataFrames. 
+
+        Parameters
+        ----------
+        other : Index or sequence of Index
+            Indices which dataframes are being concatenated.
+
+        Returns
+        -------
+            : TraceIndex
+            Concatenated index.
+        """
+        if not isinstance(other, (list, tuple)):
+            other = [other]
+
+        df = [self.get_df()]
+        other_dfs = [index.get_df() for index in other]
+        concat_dfs = pd.concat(df + other_dfs, ignore_index=True)
+
+        if self.name is not None:
+            concat_dfs.set_index(self.name, inplace=True)
+        indices = concat_dfs.index.unique().sort_values()
+        return type(self).from_index(index=indices, idf=concat_dfs, index_name=self.name)
+
+    def __add__(self, other):
+        return self.concat(other)
+
     def build_index(self, index=None, idf=None, **kwargs):
         """Build index."""
         if index is not None:
