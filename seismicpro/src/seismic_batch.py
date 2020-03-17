@@ -1320,6 +1320,7 @@ class SeismicBatch(Batch):
 
     @action
     @inbatch_parallel(init='_init_component')
+    @apply_to_each_component
     def equalize(self, index, src, dst, params, survey_id_col=None):
         """ Equalize amplitudes of different seismic surveys in dataset.
 
@@ -1373,7 +1374,7 @@ class SeismicBatch(Batch):
         provided excplicitly either as argument, or as `params` dict key-value
         pair.
         """
-        if not isinstance(self.index, FieldIndex):
+        if not isinstance(self.index, (FieldIndex, TraceIndex)):
             raise ValueError("Index must be FieldIndex, not {}".format(type(self.index)))
 
         pos = self.get_pos(None, src, index)
@@ -1382,7 +1383,7 @@ class SeismicBatch(Batch):
         if survey_id_col is None:
             survey_id_col = params['survey_id_col']
 
-        surveys_by_fieldrecord = np.unique(self.index.get_df(index=index)[survey_id_col])
+        surveys_by_fieldrecord = np.unique(self.index.get_df(index=index, reset=False)[survey_id_col])
         check_unique_fieldrecord_across_surveys(surveys_by_fieldrecord, index)
         survey = surveys_by_fieldrecord[0]
 
