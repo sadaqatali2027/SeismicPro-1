@@ -1363,19 +1363,19 @@ class SeismicBatch(Batch):
 
         Raises
         ------
-        ValueError : If index is not FieldIndex.
+        ValueError : If index is not FieldIndex or TraceIndex.
         ValueError : If shot gather with same id is contained in more
                      than one survey.
 
         Note
         ----
-        Works properly only with FieldIndex.
+        Works properly only with FieldIndex or TraceIndex.
         If `params` dict is user-defined, `survey_id_col` should be
         provided excplicitly either as argument, or as `params` dict key-value
         pair.
         """
         if not isinstance(self.index, (FieldIndex, TraceIndex)):
-            raise ValueError("Index must be FieldIndex, not {}".format(type(self.index)))
+            raise ValueError("Index must be FieldIndex or TraceIndex, not {}".format(type(self.index)))
 
         pos = self.get_pos(None, src, index)
         field = getattr(self, src)[pos]
