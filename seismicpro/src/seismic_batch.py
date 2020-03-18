@@ -1321,7 +1321,7 @@ class SeismicBatch(Batch):
     @action
     @inbatch_parallel(init='_init_component')
     @apply_to_each_component
-    def equalize(self, index, src, dst, params, survey_id_col=None):
+    def equalize(self, index, src, dst, params, survey_id_col=None, upscale=False):
         """ Equalize amplitudes of different seismic surveys in dataset.
 
         This method performs quantile normalization by shifting and
@@ -1355,6 +1355,8 @@ class SeismicBatch(Batch):
             surveys from different seasons.
             Optional if `params` is a result of `SeismicDataset`'s
             method `find_equalization_params`.
+        upscale : bool, optional
+            weather to upscale batch items to its origin scale
 
         Returns
         -------
@@ -1390,10 +1392,11 @@ class SeismicBatch(Batch):
         p_95 = params[survey]
 
         # shifting and scaling data so that 5th and 95th percentiles are -1 and 1 respectively
-        equalized_field = field / p_95
+        equalized_field = (field / p_95) if not upscale else (field * p_95)
 
         getattr(self, dst)[pos] = equalized_field
         return self
+
 
     def _crop(self, image, coords, shape):
         """ Perform crops from the image.
