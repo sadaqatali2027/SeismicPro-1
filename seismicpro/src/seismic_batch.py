@@ -1320,7 +1320,8 @@ class SeismicBatch(Batch):
 
     @action
     @inbatch_parallel(init='_init_component')
-    def equalize(self, index, src, dst, params, survey_id_col=None):
+    @apply_to_each_component
+    def equalize(self, index, src, dst, params, survey_id_col=None, upscale=False):
         """ Equalize amplitudes of different seismic surveys in dataset.
 
         This method performs quantile normalization by shifting and
@@ -1354,6 +1355,8 @@ class SeismicBatch(Batch):
             surveys from different seasons.
             Optional if `params` is a result of `SeismicDataset`'s
             method `find_equalization_params`.
+        upscale : bool, optional
+            weather to upscale batch items to its origin scale
 
         Returns
         -------
@@ -1362,19 +1365,19 @@ class SeismicBatch(Batch):
 
         Raises
         ------
-        ValueError : If index is not FieldIndex.
+        ValueError : If index is not FieldIndex or TraceIndex.
         ValueError : If shot gather with same id is contained in more
                      than one survey.
 
         Note
         ----
-        Works properly only with FieldIndex.
+        Works properly only with FieldIndex or TraceIndex.
         If `params` dict is user-defined, `survey_id_col` should be
         provided excplicitly either as argument, or as `params` dict key-value
         pair.
         """
-        if not isinstance(self.index, FieldIndex):
-            raise ValueError("Index must be FieldIndex, not {}".format(type(self.index)))
+        if not isinstance(self.index, (FieldIndex, TraceIndex)):
+            raise ValueError("Index must be FieldIndex or TraceIndex, not {}".format(type(self.index)))
 
         pos = self.get_pos(None, src, index)
         field = getattr(self, src)[pos]
@@ -1382,17 +1385,18 @@ class SeismicBatch(Batch):
         if survey_id_col is None:
             survey_id_col = params['survey_id_col']
 
-        surveys_by_fieldrecord = np.unique(self.index.get_df(index=index)[survey_id_col])
+        surveys_by_fieldrecord = np.unique(self.index.get_df(index=index, reset=False)[survey_id_col])
         check_unique_fieldrecord_across_surveys(surveys_by_fieldrecord, index)
         survey = surveys_by_fieldrecord[0]
 
         p_95 = params[survey]
 
         # shifting and scaling data so that 5th and 95th percentiles are -1 and 1 respectively
-        equalized_field = field / p_95
+        equalized_field = (field / p_95) if not upscale else (field * p_95)
 
         getattr(self, dst)[pos] = equalized_field
         return self
+
 
     def _crop(self, image, coords, shape):
         """ Perform crops from the image.
