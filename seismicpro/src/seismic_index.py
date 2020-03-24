@@ -184,7 +184,7 @@ class TraceIndex(DatasetIndex):
         return type(self).from_index(index=indices, idf=df, index_name=self.name)
 
     def concat(self, other):
-        """ Concatenate vertically current and `other` indices DataFrames. 
+        """ Concatenate vertically current and `other` indices DataFrames.
 
         Parameters
         ----------
@@ -434,3 +434,31 @@ class BinsIndex(TraceIndex):
             show_2d_heatmap(self._idf, **kwargs)
         else:
             show_1d_heatmap(self._idf, **kwargs)
+
+
+class RecIndex(TraceIndex):
+    """ Index for recievers.
+
+    Parameters
+    ----------
+    kwargs : dict
+        Named arguments for ```build_df```` method.
+        Can be either a set of ```dfr```, ```dfs```, ```dfx``` arguments for
+        building index from SPS files, or named arguments for ```batchflow.FilesIndex```
+        for building index from SEGY files.
+
+    Attributes
+    ----------
+    index_name : str or tuple of str
+        Name of the DataFrame index.
+    meta : dict
+        Metadata about index.
+    _idf : DataFrame
+        DataFrame with rows corresponding to seismic traces and columns with metadata about
+        traces. Set of columns includes FieldRecord, TraceNumber, TRACE_SEQUENCE_FILE, file_id and
+        a number of extra_headers for index built from SEGY files or SPS file columns for index
+        built from SPS files.
+    """
+    def __init__(self, *args, **kwargs):
+        kwargs['index_name'] = 'Group'
+        super().__init__(*args, **kwargs)
