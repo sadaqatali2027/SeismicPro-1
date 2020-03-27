@@ -438,6 +438,9 @@ class BinsIndex(TraceIndex):
 
 class RecIndex(TraceIndex):
     """ Index for recievers.
+    It uses `Group` columns of the dataframe as index. `Group` is built by concatenation
+    of `GroupX` and `GroupY` columns. If any of `GroupX` and `GroupY` is not present,
+    `Group` is not built and `RecIndex` will raise an error.
 
     Parameters
     ----------

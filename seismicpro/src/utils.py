@@ -600,7 +600,8 @@ def make_segy_index(filename, extra_headers=None, limits=None):
             meta[k] = segyfile.attributes(getattr(segyio.TraceField, k))[limits]
 
         meta['file_id'] = np.repeat(filename, segyfile.tracecount)[limits]
-        meta['Group'] = np.array(['_'.join(x) for x in zip(meta['GroupX'].astype(str), meta['GroupY'].astype(str))])
+        if 'GroupX' in meta.keys() and 'GroupY' in meta.keys():
+            meta['Group'] = np.array(['_'.join(x) for x in zip(meta['GroupX'].astype(str), meta['GroupY'].astype(str))])
 
     df = pd.DataFrame(meta)
     return df
