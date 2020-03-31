@@ -15,7 +15,9 @@ from .seismic_index import SegyFilesIndex, FieldIndex, KNNIndex, TraceIndex, Cus
 from .utils import (FILE_DEPENDEND_COLUMNS, partialmethod, calculate_sdc_for_field, massive_block,
                     check_unique_fieldrecord_across_surveys)
 from .file_utils import write_segy_file
-from .plot_utils import IndexTracker, spectrum_plot, seismic_plot, statistics_plot, gain_plot
+from .plot_utils import IndexTracker, spectrum_plot, seismic_plot, statistics_plot, gain_plot, semblance_plot
+from .semblance_utils import (running_mean, _calc_semb_easy, _calc_semb_hard, _calc_semb_hard_numba_mx,
+                             _calc_semb_hard_matrix)
 
 INDEX_UID = 'TRACE_SEQUENCE_FILE'
 
@@ -1527,3 +1529,50 @@ class SeismicBatch(Batch):
         x += n_skip
         getattr(self, dst)[pos] = x
         return self
+
+    @action
+    def calculate_semblance(self, src, dst, velocity, step, window=51, method='easy'):
+        """Construct semblance map.
+        Window should be from 5 to 256ms"""
+
+        if len(velocity) == 2:
+            velocity = np.arange(*velocity, step)/1000
+
+        # if method not in ['easy', 'hard']:
+        #     raise ValueError("Wrong method type. Should be 'easy' or 'hard' not {}".format(method))
+
+        t_zero = self.meta[src]['samples'].astype(int)
+        t_step = t_zero[1] - t_zero[0]
+        middle = np.round(window/2).astype(int)
+        self._calculate_semblance_all(src=src, dst=dst, velocity=velocity, t_zero=t_zero,
+                                      middle=middle, t_step=t_step, method=method)
+        self.meta[dst] = dict(velocity=velocity)
+        return self
+
+    @action
+    @inbatch_parallel(init="_init_component", target="threads")
+    def _calculate_semblance_all(self, index, src, dst, velocity, t_zero, middle, t_step, method):
+        pos = self.get_pos(None, src, index)
+        field = getattr(self, src)[pos]
+        semblance = np.zeros((velocity.shape[0], field.shape[1]))
+        offset = np.sort(self.index.get_df(index=index)['offset'])
+        if method == 'easy':
+            semblance = _calc_semb_easy(np.array(field), velocity, t_zero, t_step, offset, semblance)
+            semblance = np.apply_along_axis(lambda m: running_mean(m, middle), axis=1, arr=semblance**2).T
+        elif method == 'hard':
+            semblance = _calc_semb_hard(np.array(field), velocity, t_zero, t_step, offset, semblance, middle).T
+        elif method == 'matrix':
+            semblance = _calc_semb_hard_matrix(np.array(field), velocity, t_zero, t_step, offset, semblance, middle).T
+        elif method == 'numba_matrix':
+            semblance = _calc_semb_hard_numba_mx(np.array(field), velocity, t_zero, t_step, offset, semblance, middle).T
+        getattr(self, dst)[pos] = semblance
+
+    @action
+    def semblance_plot(self, src, index, figsize=(10, 7)):
+        """plot semblance"""
+        velocity = self.meta[src].get('velocity')
+        if velocity is None:
+            raise ValueError(f'There is no semblance in {src} variable.')
+        pos = self.get_pos(None, src, index)
+        semblance = getattr(self, src)[pos]
+        semblance_plot(velocity, semblance, figsize)

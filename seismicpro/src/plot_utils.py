@@ -5,6 +5,25 @@ import matplotlib.pyplot as plt
 from matplotlib import patches, colors as mcolors
 from .utils import measure_gain_amplitude
 
+
+RGB_CONST = np.array([[0, 0, 255],
+                      [1, 171, 255],
+                      [1, 212, 255],
+                      [1, 255, 255],
+                      [1, 255, 213],
+                      [0, 255, 171],
+                      [0, 255, 1],
+                      [171, 255, 1],
+                      [213, 255, 0],
+                      [213, 255, 0],
+                      [255, 255, 1],
+                      [255, 213, 1],
+                      [255, 171, 0],
+                      [255, 0, 0],
+                      [255, 0, 171],
+                      [253, 0, 213]])/255
+
+
 class IndexTracker:
     """Provides onscroll and update methods for matplotlib scroll_event."""
     def __init__(self, ax, frames, frame_names, scroll_step=1, **kwargs):
@@ -529,4 +548,27 @@ def show_2d_heatmap(idf, figsize=None, save_to=None, dpi=300, **kwargs):
     plt.ylabel('y-Bins')
     if save_to is not None:
         plt.savefig(save_to, dpi=dpi)
+    plt.show()
+
+
+def semblance_plot(velocity, semblance, figsize):
+    """Draw semblance plot for current semblance"""
+    max_val = np.max(semblance)
+    plt.figure(figsize=figsize)
+    levels = (np.logspace(0, 1, num=len(RGB_CONST)+1, base=500)/500) * max_val
+    levels[0] = 0
+    xlist = np.arange(0, semblance.shape[1])
+    ylist = np.arange(0, semblance.shape[0])
+    x_grid, y_grid = np.meshgrid(xlist, ylist)
+
+    plt.contour(x_grid, y_grid, semblance, levels, colors='k', linewidths=.7)
+    contour_filled = plt.contourf(x_grid, y_grid, semblance, levels, colors=RGB_CONST)
+    plt.colorbar(contour_filled)
+    plt.ylim(semblance.shape[0], 0)
+
+    ticks = np.arange(0, semblance.shape[1], 20)
+    velocity *= 1000
+    step = np.round((velocity[-1] - velocity[0])/len(ticks)).astype(int)
+    labels = np.arange(velocity[0], velocity[-1], step).astype(int)
+    plt.xticks(ticks=ticks, labels=labels)
     plt.show()
