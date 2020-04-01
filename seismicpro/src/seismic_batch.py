@@ -1532,7 +1532,7 @@ class SeismicBatch(Batch):
 
     @action
     def calculate_semblance(self, src, dst, velocity, step, window=51, method='easy'):
-        """Calculate semblance for given fields from `src` component and save resulted semblance to `dst` component.
+        r""" Calculate semblance for given fields from `src` component and save resulted semblance to `dst` component.
         This function has few approaches for semblance calculation, one can control it via `method` parameter.
 
 

@@ -1,25 +1,7 @@
-"file with helpful functions"
+"file with helpful functions" # pylint: disable=not-an-iterable
 import numpy as np
 
 from numba import njit, prange
-
-
-RGB_CONST = np.array([[0, 0, 255],
-                      [1, 171, 255],
-                      [1, 212, 255],
-                      [1, 255, 255],
-                      [1, 255, 213],
-                      [0, 255, 171],
-                      [0, 255, 1],
-                      [171, 255, 1],
-                      [213, 255, 0],
-                      [213, 255, 0],
-                      [255, 255, 1],
-                      [255, 213, 1],
-                      [255, 171, 0],
-                      [255, 0, 0],
-                      [255, 0, 171],
-                      [253, 0, 213]])/255
 
 
 def running_mean(item, window_width):
@@ -103,7 +85,6 @@ def _calc_semb_hard_numba_mx(field, velocity, t_zero, t_step, offset, semblance,
                     break
                 num[vi][j] += field[i, ix]
                 den[vi][j] += (field[i, ix])**2
-
 
     t_zero = t_zero + middle
     t_zero = t_zero[:-middle]
