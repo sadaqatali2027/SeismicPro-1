@@ -17,7 +17,7 @@ from .utils import (FILE_DEPENDEND_COLUMNS, partialmethod, calculate_sdc_for_fie
 from .file_utils import write_segy_file
 from .plot_utils import IndexTracker, spectrum_plot, seismic_plot, statistics_plot, gain_plot, semblance_plot
 from .semblance_utils import (running_mean, _calc_semb_easy, _calc_semb_hard, _calc_semb_hard_numba_mx,
-                             _calc_semb_hard_matrix)
+                              _calc_semb_hard_matrix)
 
 INDEX_UID = 'TRACE_SEQUENCE_FILE'
 
@@ -1532,11 +1532,50 @@ class SeismicBatch(Batch):
 
     @action
     def calculate_semblance(self, src, dst, velocity, step, window=51, method='easy'):
-        """Construct semblance map.
-        Window should be from 5 to 256ms"""
+        """Calculate semblance for given fields from `src` component and save resulted semblance to `dst` component.
+        This function has few approaches for semblance calculation, one can control it via `method` parameter.
 
-        if len(velocity) == 2:
-            velocity = np.arange(*velocity, step)/1000
+
+        Semblance is a quantitative measure of the coherence of seismic data from multiple channels that is equal
+        to the energy of a stacked trace divided by the energy of all the traces that make up the stack.
+
+        Parameters
+        ----------
+        src : str
+            The batch component to get field from.
+        dst : str
+            The batch component to put semblance in.
+        velocity : list with length 2 or more.
+            If length is 2, then the checked velocities will be sampled with given step via `step` parameter
+            from first value to the second one. If length is different, semblance will be calculated for given
+            velocities.
+        step: int
+            Step to sample velocity.
+        window: int
+            Window size for smoothing. It should be from 5 to 256ms.
+        method: 'easy' or 'hard'
+            If 'easy', semblance will calculate semblance using the values of amplitudes itself.
+            If 'hard', resulted semblance will be calcualted via formula.
+            :math:`S = \frac{\sum^{k+N/2}_{k-N/2}(\sum^M_1 f_{ij})^2}
+                            {M \sum^{k+N/2}_{k-N/2}\sum^M_1 (f_{ij})^2}`
+
+        Returns
+        -------
+            : SeismicBatch
+            Batch with semblance in `dst` component. `dst` components are now arrays
+            (of size batch items) of array (of size velocity values) of array (of field length).
+
+        Raises
+        ------
+        ValueError : if `method` receive wrong name.
+
+        Notes
+        -----
+        - Works properly only with FieldIndex.
+        """
+
+
+        velocity = np.arange(*velocity, step)/1000 if len(velocity) == 2 else velocity / 1000
 
         # if method not in ['easy', 'hard']:
         #     raise ValueError("Wrong method type. Should be 'easy' or 'hard' not {}".format(method))
@@ -1569,7 +1608,21 @@ class SeismicBatch(Batch):
 
     @action
     def semblance_plot(self, src, index, figsize=(10, 7)):
-        """plot semblance"""
+        """Semblance plot.
+
+        Parameters
+        ----------
+         src : str
+            The batch component to get semblance from.
+        index : same type as batch.indices
+            Data index to show.
+        figsize : tuple with length 2
+            size of output graph.
+
+        Raises
+        ------
+        ValueError : if semblance isn't calculated.
+        """
         velocity = self.meta[src].get('velocity')
         if velocity is None:
             raise ValueError(f'There is no semblance in {src} variable.')
