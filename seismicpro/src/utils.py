@@ -1,4 +1,4 @@
-""" Seismic batch tools """
+""" Seismic batch tools """ # pylint: disable=not-an-iterable
 import csv
 import shutil
 import tempfile
@@ -878,7 +878,8 @@ def transform_to_fixed_width_columns(path, path_save=None, n_spaces=8, max_len=(
 
 @njit(parallel=True)
 def calculate_semblance(field, velocity, t_zero, t_step, offset, semblance, middle):
-    """Semblance calculation. For thorough documentation look action method in :ref:`calculate_semblance <./sesismic_batch.py>`"""
+    """Semblance calculation. For thorough documentation look action method in
+    :ref:`calculate_semblance <./sesismic_batch.py>`"""
     num = np.zeros_like(semblance)
     den = np.zeros_like(semblance)
     max_val = int(t_zero[-1]/t_step)-1
