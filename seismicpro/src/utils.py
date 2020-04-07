@@ -6,6 +6,7 @@ import functools
 
 import numpy as np
 import pandas as pd
+from numba import njit, prange
 from sklearn.linear_model import LinearRegression
 from scipy.signal import medfilt, hilbert
 import segyio
@@ -874,3 +875,49 @@ def transform_to_fixed_width_columns(path, path_save=None, n_spaces=8, max_len=(
             if path_save:
                 return
             shutil.copyfile(write_file.name, path)
+
+@njit(parallel=True)
+def calculate_semblance(field, velocity, t_zero, t_step, offset, semblance, middle):
+    """Semblance calculation. For thorough documentation look action method in :ref:`calculate_semblance <./sesismic_batch.py>`"""
+    num = np.zeros_like(semblance)
+    den = np.zeros_like(semblance)
+    max_val = int(t_zero[-1]/t_step)-1
+
+    t_zero_sq = t_zero**2
+    offset_sq = offset**2
+    velocity_sq = velocity**2
+    field_sh = field.shape[1]-1
+    t_len = len(t_zero)
+    field_len = field.shape[0]
+    vel_len = len(velocity)
+    for ix_t in prange(field_len):
+        trace = field[ix_t]
+        for vi in prange(vel_len):
+            vel = velocity_sq[vi]
+            for itera in prange(t_len):
+                time = t_zero_sq[itera]
+                ti = np.sqrt(time + offset_sq[ix_t]/vel)
+                ti /= t_step
+                iti = np.int32(ti)
+                if iti > field_sh:
+                    break
+                num[vi][itera] += trace[iti]
+                den[vi][itera] += trace[iti]**2
+
+    t_zero = t_zero + middle
+    t_zero = t_zero[:-middle]
+    for vi in prange(vel_len):
+        vel = velocity[vi]
+        for itera in prange(t_len):
+            time = t_zero[itera]
+            time /= t_step
+            time = np.int32(time)
+            ismin = time - middle if time - middle > 0 else 0
+            ismax = time + middle if time + middle < max_val else max_val
+
+            nsum = dsum = 0
+            for i in range(ismin, ismax):
+                nsum += num[vi][i]**2
+                dsum += den[vi][i]
+            semblance[vi][itera] = nsum/(field.shape[0]*dsum + 1e-6) if dsum >= 1e-8 else 0
+    return semblance

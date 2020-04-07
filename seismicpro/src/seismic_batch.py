@@ -13,11 +13,9 @@ from ..batchflow import action, inbatch_parallel, Batch, any_action_failed
 from .seismic_index import SegyFilesIndex, FieldIndex, KNNIndex, TraceIndex, CustomIndex
 
 from .utils import (FILE_DEPENDEND_COLUMNS, partialmethod, calculate_sdc_for_field, massive_block,
-                    check_unique_fieldrecord_across_surveys)
+                    check_unique_fieldrecord_across_surveys, calculate_semblance)
 from .file_utils import write_segy_file
 from .plot_utils import IndexTracker, spectrum_plot, seismic_plot, statistics_plot, gain_plot, semblance_plot
-from .semblance_utils import (running_mean, _calc_semb_easy, _calc_semb_hard, _calc_semb_hard_numba_mx,
-                              _calc_semb_hard_matrix)
 
 INDEX_UID = 'TRACE_SEQUENCE_FILE'
 
@@ -1531,13 +1529,35 @@ class SeismicBatch(Batch):
         return self
 
     @action
-    def calculate_semblance(self, src, dst, velocity, step, window=51, method='easy'):
+    def calculate_semblance(self, src, dst, velocity, step, window=51):
         r""" Calculate semblance for given fields from `src` component and save resulted semblance to `dst` component.
-        This function has few approaches for semblance calculation, one can control it via `method` parameter.
+        Semblance is a measure of multichannel coherence. This measure is calculated along all possible horizons from
+        a given speed range and with all possible starting points. Range of starting points is equal to field range.
 
+        Calculation of each horizon is based on the following formula.
 
-        Semblance is a quantitative measure of the coherence of seismic data from multiple channels that is equal
-        to the energy of a stacked trace divided by the energy of all the traces that make up the stack.
+        :math:`th_i = \sqrt{t_z^2 + off_i^2/v^2}`, where
+
+        :math:`t_z` - start time of the horizon
+        :math:`off_i` - distance from the gather to the i-th trace (offset)
+        :math:`v` - speed for this horizon
+        :math:`th_i` - horizon time for given offset.
+
+        The value of horison amplitude in point t_h can be received from trace with same offset. In order to
+        calculate all the horizon values, you need to get the t_h values for all offsets.
+
+        Then, value :math:`f_{i, th_i} = trace_i[th_i]` is an amplitude for horizon with i-th offset.
+        Semblance calculate base on horizon values by the following formula:
+
+        :math:`S(k, th) = \frac{\sum^{k+N/2}_{k-N/2}(\sum^M_{i=1} \sum^M_{j=1} f_{i, th[j]})^2}
+                               {M \sum^{k+N/2}_{k-N/2}\sum^M_1 \sum^M_{j=1} f_{i, th[j]})^2}`, where
+        S - semblance value for range for starting point k
+        M - Number of traces in field
+        N - Window size
+        th - Horizon.
+
+        Resulted matrix contains semblance values based on horizons with each combinations of started point :math:`t_z`
+        and speed :math:`v`. This matrix has shape (time_length, velocity_length).
 
         Parameters
         ----------
@@ -1553,11 +1573,6 @@ class SeismicBatch(Batch):
             Step to sample velocity.
         window: int
             Window size for smoothing. It should be from 5 to 256ms.
-        method: 'easy' or 'hard'
-            If 'easy', semblance will calculate semblance using the values of amplitudes itself.
-            If 'hard', resulted semblance will be calcualted via formula.
-            :math:`S = \frac{\sum^{k+N/2}_{k-N/2}(\sum^M_1 f_{ij})^2}
-                            {M \sum^{k+N/2}_{k-N/2}\sum^M_1 (f_{ij})^2}`
 
         Returns
         -------
@@ -1571,39 +1586,28 @@ class SeismicBatch(Batch):
 
         Notes
         -----
-        - Works properly only with FieldIndex.
+        - Works properly only with CDP index.
         """
 
 
         velocity = np.arange(*velocity, step)/1000 if len(velocity) == 2 else velocity / 1000
 
-        # if method not in ['easy', 'hard']:
-        #     raise ValueError("Wrong method type. Should be 'easy' or 'hard' not {}".format(method))
-
         t_zero = self.meta[src]['samples'].astype(int)
         t_step = t_zero[1] - t_zero[0]
         middle = np.round(window/2).astype(int)
         self._calculate_semblance_all(src=src, dst=dst, velocity=velocity, t_zero=t_zero,
-                                      middle=middle, t_step=t_step, method=method)
+                                      middle=middle, t_step=t_step)
         self.meta[dst] = dict(velocity=velocity)
         return self
 
     @action
     @inbatch_parallel(init="_init_component", target="threads")
-    def _calculate_semblance_all(self, index, src, dst, velocity, t_zero, middle, t_step, method):
+    def _calculate_semblance_all(self, index, src, dst, velocity, t_zero, middle, t_step):
         pos = self.get_pos(None, src, index)
         field = getattr(self, src)[pos]
         semblance = np.zeros((velocity.shape[0], field.shape[1]))
         offset = np.sort(self.index.get_df(index=index)['offset'])
-        if method == 'easy':
-            semblance = _calc_semb_easy(np.array(field), velocity, t_zero, t_step, offset, semblance)
-            semblance = np.apply_along_axis(lambda m: running_mean(m, middle), axis=1, arr=semblance**2).T
-        elif method == 'hard':
-            semblance = _calc_semb_hard(np.array(field), velocity, t_zero, t_step, offset, semblance, middle).T
-        elif method == 'matrix':
-            semblance = _calc_semb_hard_matrix(np.array(field), velocity, t_zero, t_step, offset, semblance, middle).T
-        elif method == 'numba_matrix':
-            semblance = _calc_semb_hard_numba_mx(np.array(field), velocity, t_zero, t_step, offset, semblance, middle).T
+        semblance = calculate_semblance(np.array(field), velocity, t_zero, t_step, offset, semblance, middle).T
         getattr(self, dst)[pos] = semblance
 
     @action
