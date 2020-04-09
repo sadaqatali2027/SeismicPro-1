@@ -571,4 +571,6 @@ def semblance_plot(velocity, semblance, figsize):
     step = np.round((velocity[-1] - velocity[0])/len(ticks)).astype(int)
     labels = np.arange(velocity[0], velocity[-1], step).astype(int)
     plt.xticks(ticks=ticks, labels=labels)
+    plt.xlabel('Speed')
+    plt.ylabel('Time')
     plt.show()
