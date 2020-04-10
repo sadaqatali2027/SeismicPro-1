@@ -590,7 +590,7 @@ def semblance_plot(velocity, semblance, figsize=None, name=None, index=None):
     plt.xticks(ticks=ticks, labels=labels)
     plt.ylim(semblance.shape[0], 0)
     if name is not None or index is not None:
-         plt.title(f'{name} {index}')
+        plt.title(f'{name} {index}')
     plt.xlabel('Speed')
     plt.ylabel('Time')
     plt.show()
