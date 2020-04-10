@@ -1632,4 +1632,5 @@ class SeismicBatch(Batch):
             raise ValueError(f'There is no semblance in {src} variable.')
         pos = self.get_pos(None, src, index)
         semblance = getattr(self, src)[pos]
-        semblance_plot(velocity, semblance, figsize)
+        semblance_plot(velocity, semblance, figsize, src, index)
+        return self

@@ -550,27 +550,47 @@ def show_2d_heatmap(idf, figsize=None, save_to=None, dpi=300, **kwargs):
         plt.savefig(save_to, dpi=dpi)
     plt.show()
 
+def semblance_plot(velocity, semblance, figsize=None, name=None, index=None):
+    """Draw given semblance.
 
-def semblance_plot(velocity, semblance, figsize):
-    """Draw semblance plot for current semblance"""
+    Parameters
+    ----------
+    velocity : list of length 2
+        Min and max values of speed in ms/sec.
+    semblance : numpy array
+        Matrix with semblance.
+    figsize : tuple, optional
+        Output figure size.
+    name : str, optional
+        Semblance's component name.
+    index : str or int, optional
+        Batch index of current element.
+
+    Returns
+    -------
+    Semblance plot.
+    """
     max_val = np.max(semblance)
     plt.figure(figsize=figsize)
-    levels = (np.logspace(0, 1, num=len(RGB_CONST)+1, base=500)/500) * max_val
+    levels = (np.logspace(0, 1, num=16, base=500)/500) * max_val
     levels[0] = 0
     xlist = np.arange(0, semblance.shape[1])
     ylist = np.arange(0, semblance.shape[0])
     x_grid, y_grid = np.meshgrid(xlist, ylist)
 
+    digitized_semb = np.digitize(semblance, levels).astype(float)
     plt.contour(x_grid, y_grid, semblance, levels, colors='k', linewidths=.7)
-    contour_filled = plt.contourf(x_grid, y_grid, semblance, levels, colors=RGB_CONST)
-    plt.colorbar(contour_filled)
-    plt.ylim(semblance.shape[0], 0)
+    plt.imshow(digitized_semb, aspect='auto', cmap=plt.get_cmap('jet'))
+    plt.colorbar()
 
     ticks = np.arange(0, semblance.shape[1], 20)
     velocity *= 1000
     step = np.round((velocity[-1] - velocity[0])/len(ticks)).astype(int)
     labels = np.arange(velocity[0], velocity[-1], step).astype(int)
     plt.xticks(ticks=ticks, labels=labels)
+    plt.ylim(semblance.shape[0], 0)
+    if name is not None or index is not None:
+         plt.title(f'{name} {index}')
     plt.xlabel('Speed')
     plt.ylabel('Time')
     plt.show()
