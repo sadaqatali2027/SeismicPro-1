@@ -6,24 +6,6 @@ from matplotlib import patches, colors as mcolors
 from .utils import measure_gain_amplitude
 
 
-RGB_CONST = np.array([[0, 0, 255],
-                      [1, 171, 255],
-                      [1, 212, 255],
-                      [1, 255, 255],
-                      [1, 255, 213],
-                      [0, 255, 171],
-                      [0, 255, 1],
-                      [171, 255, 1],
-                      [213, 255, 0],
-                      [213, 255, 0],
-                      [255, 255, 1],
-                      [255, 213, 1],
-                      [255, 171, 0],
-                      [255, 0, 0],
-                      [255, 0, 171],
-                      [253, 0, 213]])/255
-
-
 class IndexTracker:
     """Provides onscroll and update methods for matplotlib scroll_event."""
     def __init__(self, ax, frames, frame_names, scroll_step=1, **kwargs):

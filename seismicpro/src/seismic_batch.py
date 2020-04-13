@@ -1587,6 +1587,7 @@ class SeismicBatch(Batch):
         Notes
         -----
         - Works properly only with CDP index.
+        - Adding 'velocity' to meta data.
         """
 
 
