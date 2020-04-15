@@ -304,15 +304,14 @@ class SeismicBatch(Batch):
             if fr_comp not in self.meta:
                 raise ValueError(f'{fr_comp} not exist.')
 
-            added_meta = self.meta[fr_comp]
+            added_meta = self.meta[fr_comp].copy()
             if keys[ix] is not None:
                 if isinstance(keys[ix], str):
                     added_meta = {k: added_meta[k] for k in keys}
                 else:
                     added_meta = {k: added_meta[k] for k in keys[ix]}
-            new_meta = dict(added_meta)
-            new_meta.update(**self.meta[t_comp])
-            self.meta[t_comp] = new_meta
+            added_meta.update(**self.meta[t_comp])
+            self.meta[t_comp] = added_meta
 
         return self
 
