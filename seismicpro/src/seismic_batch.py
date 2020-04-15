@@ -284,7 +284,7 @@ class SeismicBatch(Batch):
             'new_raw': {'arg_1': 'val_1', 'arg_2': 'val_2'}}
 
 
-        Use for few components:
+        Use for several components:
             >>> batch.copy_meta(['raw', 'raw'], ['new_raw', 'new_raw_2'], key=[['arg_1'], ['arg_2']])
             >>> batch.meta
             {'raw': {'arg_1': 'val_1', 'arg_2': 'val_2', 'arg_3': 'val_3'},
